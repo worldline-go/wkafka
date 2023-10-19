@@ -68,7 +68,7 @@ func NewProducer[T any](client *Client, cfg ProducerConfig[T]) (Producer[T], err
 
 	return &produce[T]{
 		ProducerConfig: setCfg,
-		produceRaw:     client.produceRaw,
+		produceRaw:     client.ProduceRaw,
 	}, nil
 }
 

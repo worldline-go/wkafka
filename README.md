@@ -42,9 +42,7 @@ security:
 
 For creating a consumer we need to give config while creating a client.
 
-```go
-
-```
+> TODO add example
 
 ### Producer
 
@@ -60,9 +58,7 @@ defer client.Close()
 
 Create a producer based of client to set default values.
 
-```go
-
-```
+> TODO add example
 
 ## Development
 

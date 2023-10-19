@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -110,8 +111,12 @@ func (c *Client) Consume(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) produceRaw(ctx context.Context, records []*kgo.Record) error {
+func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 	result := c.Kafka.ProduceSync(ctx, records...)
 
 	return result.FirstErr()
+}
+
+func (c *Client) Admin() *kadm.Client {
+	return kadm.NewClient(c.Kafka)
 }

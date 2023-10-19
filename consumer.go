@@ -37,6 +37,14 @@ type ConsumeConfig struct {
 	//        - 90
 	//      before: 20 // skip all offsets before or equal to this offset
 	Skip map[string]map[int32]Offsets `cfg:"skip"`
+	// MaxPollRecords is the maximum number of records returned in a single call to poll.
+	//  - Default is max.poll.records in the broker configuration, usually 500.
+	//  - Fetching messages from broker, this is not related with batch processing!
+	MaxPollRecords int `cfg:"max_poll_records"`
+	// Concurrent to run the consumer in concurrent mode for each partition and topic.
+	//  - Default is false.
+	//  - Each topic could have different type of value so use with processor map.
+	Concurrent bool `cfg:"concurrent"`
 }
 
 type Offsets struct {
@@ -96,53 +104,29 @@ func (c consume[T]) skip(r *kgo.Record) bool {
 
 func (c consume[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 	for {
-		fetches := cl.PollFetches(ctx)
-		if fetches.IsClientClosed() {
+		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
+		if fetch.IsClientClosed() {
 			return ErrClientClosed
 		}
 
-		var errP error
-		fetches.EachError(func(t string, p int32, err error) {
-			if errors.Is(err, context.Canceled) {
-				errP = err
-
-				return
-			}
-
-			errP = fmt.Errorf("fetch err topic %s partition %d: %w", t, p, err)
-		})
-		if errP != nil {
-			return errP
+		if err := fetch.Err(); err != nil {
+			return fmt.Errorf("poll fetch err: %w", err)
 		}
 
-		for iter := fetches.RecordIter(); !iter.Done(); {
-			if err := c.iteration(ctx, cl, iter); err != nil {
-				return err
+		for iter := fetch.RecordIter(); !iter.Done(); {
+			r := iter.Next()
+			if err := c.iteration(ctx, r); err != nil {
+				return wrapErr(r, err)
+			}
+
+			if err := cl.CommitRecords(ctx, r); err != nil {
+				return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
 			}
 		}
 	}
 }
 
-func (c consume[T]) iteration(ctx context.Context, cl *kgo.Client, iter *kgo.FetchesRecordIter) (err error) {
-	r := iter.Next()
-	if r == nil {
-		return nil
-	}
-
-	defer func() {
-		if err != nil {
-			err = wrapErr(r, err)
-
-			return
-		}
-
-		if errCommit := cl.CommitRecords(ctx, r); errCommit != nil {
-			err = wrapErr(r, fmt.Errorf("commit records failed: %w", errCommit))
-
-			return
-		}
-	}()
-
+func (c consume[T]) iteration(ctx context.Context, r *kgo.Record) error {
 	if c.skip(r) {
 		return nil
 	}
