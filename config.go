@@ -7,4 +7,12 @@ type Config struct {
 	// Required at least one broker. Default is "localhost:9092" for local development.
 	Brokers  []string       `cfg:"brokers"  default:"localhost:9092"`
 	Security SecurityConfig `cfg:"security"`
+	// Compression is chosen in the order preferred based on broker support.
+	// The default is to use no compression.
+	//  Available:
+	//  - gzip
+	//  - snappy
+	//  - lz4
+	//  - zstd
+	Compression []string
 }

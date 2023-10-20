@@ -24,10 +24,15 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		opt(&o)
 	}
 
+	compressions, err := compressionOpts(cfg.Compression)
+	if err != nil {
+		return nil, err
+	}
+
 	kgoOpt := []kgo.Opt{
 		kgo.SeedBrokers(cfg.Brokers...),
 		kgo.ClientID(o.ClientID),
-		kgo.ProducerBatchCompression(kgo.NoCompression()),
+		kgo.ProducerBatchCompression(compressions...),
 		// kgo.WithLogger(kgo.BasicLogger(os.Stderr, kgo.LogLevelDebug, nil)),
 	}
 

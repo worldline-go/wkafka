@@ -13,6 +13,8 @@ var (
 	ErrNilData        = fmt.Errorf("nil data")
 	// ErrSkip is use to skip message in the PreCheck hook.
 	ErrSkip = fmt.Errorf("skip message")
+	// ErrInvalidCompression for producer setting check.
+	ErrInvalidCompression = fmt.Errorf("invalid compression")
 )
 
 func wrapErr(r *kgo.Record, err error) error {
