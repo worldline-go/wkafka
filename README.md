@@ -40,9 +40,7 @@ security:
 
 ### Consumer
 
-For creating a consumer we need to give config while creating a client.
-
-> TODO add example
+For creating a consumer we need to give config while creating a client with a processor struct.
 
 ### Producer
 

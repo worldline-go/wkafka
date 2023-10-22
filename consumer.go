@@ -2,8 +2,6 @@ package wkafka
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -45,6 +43,11 @@ type ConsumeConfig struct {
 	//  - Default is false.
 	//  - Each topic could have different type of value so use with processor map.
 	Concurrent bool `cfg:"concurrent"`
+	// BatchCount is a number of messages processed in a single batch.
+	//  - <= 1 is 1 message per batch.
+	//  - Processing count could be less than BatchCount if the batch is not full.
+	//  - Usable with WithConsumerBatch
+	BatchCount int `cfg:"batch_count"`
 }
 
 type Offsets struct {
@@ -57,12 +60,20 @@ type Offsets struct {
 	Before int64 `cfg:"before"`
 }
 
-type consume[T any] struct {
-	Callback func(ctx context.Context, msg T) error
-	Cfg      ConsumeConfig
-	Decode   func(raw []byte) (T, error)
-	// PreCheck is a function that is called before the callback and decode.
-	PreCheck func(ctx context.Context, r *kgo.Record) error
+type Processor[T any] interface {
+	Process(ctx context.Context, msg T) error
+}
+
+type ProcessorPreCheck interface {
+	PreCheck(ctx context.Context, r *kgo.Record) error
+}
+
+type ProcessorDecode[T any] interface {
+	Decode(raw []byte) (T, error)
+}
+
+type ProcessorDecodeWithRecord[T any] interface {
+	DecodeWithRecord(raw []byte, r *kgo.Record) (T, error)
 }
 
 type consumer interface {
@@ -70,24 +81,20 @@ type consumer interface {
 	Consume(ctx context.Context, cl *kgo.Client) error
 }
 
-func (c consume[T]) config() ConsumeConfig {
-	return c.Cfg
-}
-
-func (c consume[T]) skip(r *kgo.Record) bool {
-	if c.Cfg.Skip == nil {
+func skip(cfg *ConsumeConfig, r *kgo.Record) bool {
+	if cfg.Skip == nil {
 		return false
 	}
 
-	if _, ok := c.Cfg.Skip[r.Topic]; !ok {
+	if _, ok := cfg.Skip[r.Topic]; !ok {
 		return false
 	}
 
-	if _, ok := c.Cfg.Skip[r.Topic][r.Partition]; !ok {
+	if _, ok := cfg.Skip[r.Topic][r.Partition]; !ok {
 		return false
 	}
 
-	offsets := c.Cfg.Skip[r.Topic][r.Partition]
+	offsets := cfg.Skip[r.Topic][r.Partition]
 
 	if offsets.Before > 0 && r.Offset <= offsets.Before {
 		return true
@@ -100,60 +107,4 @@ func (c consume[T]) skip(r *kgo.Record) bool {
 	}
 
 	return false
-}
-
-func (c consume[T]) Consume(ctx context.Context, cl *kgo.Client) error {
-	for {
-		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
-		if fetch.IsClientClosed() {
-			return ErrClientClosed
-		}
-
-		if err := fetch.Err(); err != nil {
-			return fmt.Errorf("poll fetch err: %w", err)
-		}
-
-		for iter := fetch.RecordIter(); !iter.Done(); {
-			r := iter.Next()
-			if err := c.iteration(ctx, r); err != nil {
-				return wrapErr(r, err)
-			}
-
-			if err := cl.CommitRecords(ctx, r); err != nil {
-				return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
-			}
-		}
-	}
-}
-
-func (c consume[T]) iteration(ctx context.Context, r *kgo.Record) error {
-	if c.skip(r) {
-		return nil
-	}
-
-	if c.PreCheck != nil {
-		if err := c.PreCheck(ctx, r); err != nil {
-			if errors.Is(err, ErrSkip) {
-				return nil
-			}
-
-			return fmt.Errorf("pre check failed: %w", err)
-		}
-	}
-
-	data, err := c.Decode(r.Value)
-	if err != nil {
-		if errors.Is(err, ErrSkip) {
-			return nil
-		}
-
-		return fmt.Errorf("decode record failed: %w", err)
-	}
-
-	ctxCallback := context.WithValue(ctx, KeyRecord, r)
-	if err := c.Callback(ctxCallback, data); err != nil {
-		return fmt.Errorf("callback failed: %w", err)
-	}
-
-	return nil
 }

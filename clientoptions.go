@@ -46,22 +46,71 @@ func WithKGOOptions(opts ...kgo.Opt) Option {
 // WithConsumer sets the listener to use.
 func WithConsumer[T any](
 	cfg ConsumeConfig,
-	callback func(ctx context.Context, msg T) error,
-	decode func([]byte) (T, error),
-	preCheck func(context.Context, *Record) error,
+	processor Processor[T],
 ) Option {
 	return func(o *options) {
-		decode := decode
-		if decode == nil {
-			decoder := codecJSON[T]{}
-			decode = decoder.Decode
+		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
+		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
+			decodeWithRecord = v.DecodeWithRecord
 		}
 
-		o.Consumer = consume[T]{
-			Callback: callback,
-			Cfg:      cfg,
-			Decode:   decode,
-			PreCheck: preCheck,
+		var decode func([]byte) (T, error)
+		if decodeWithRecord == nil {
+			decode = codecJSON[T]{}.Decode
+			if v, ok := processor.(ProcessorDecode[T]); ok {
+				decode = v.Decode
+			}
+		}
+
+		var precheck func(context.Context, *kgo.Record) error
+		if v, ok := processor.(ProcessorPreCheck); ok {
+			precheck = v.PreCheck
+		}
+
+		o.Consumer = consumerSingle[T]{
+			Process:          processor.Process,
+			Cfg:              cfg,
+			PreCheck:         precheck,
+			DecodeWithRecord: decodeWithRecord,
+			Decode:           decode,
+		}
+	}
+}
+
+// WithConsumer sets the listener to use.
+func WithConsumerBatch[T any](
+	cfg ConsumeConfig,
+	processor Processor[[]T],
+) Option {
+	return func(o *options) {
+		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
+		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
+			decodeWithRecord = v.DecodeWithRecord
+		}
+
+		var decode func([]byte) (T, error)
+		if decodeWithRecord == nil {
+			decode = codecJSON[T]{}.Decode
+			if v, ok := processor.(ProcessorDecode[T]); ok {
+				decode = v.Decode
+			}
+		}
+
+		var precheck func(context.Context, *kgo.Record) error
+		if v, ok := processor.(ProcessorPreCheck); ok {
+			precheck = v.PreCheck
+		}
+
+		if cfg.BatchCount <= 0 {
+			cfg.BatchCount = 1
+		}
+
+		o.Consumer = consumerBatch[T]{
+			Process:          processor.Process,
+			Cfg:              cfg,
+			PreCheck:         precheck,
+			DecodeWithRecord: decodeWithRecord,
+			Decode:           decode,
 		}
 	}
 }

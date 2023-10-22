@@ -17,7 +17,7 @@ type Producer[T any] interface {
 }
 
 type ProducerHook[T any] interface {
-	ProducerHook(r *Record) *Record
+	ProduceHook(r *Record) *Record
 }
 
 type ProducerConfig[T any] struct {
@@ -29,8 +29,6 @@ type ProducerConfig[T any] struct {
 	//  - If data is []byte, Encode will be ignored.
 	//  - This works after Hook and record.Value is nil.
 	Encode func(T) ([]byte, error)
-	// Hook is use to modify record before produce.
-	// Hook func(T, *Record) *Record
 }
 
 func NewProducer[T any](client *Client, cfg ProducerConfig[T]) (Producer[T], error) {
@@ -100,7 +98,7 @@ func (p *produce[T]) prepare(data T) (*Record, error) {
 
 	// check data has Hook interface
 	if data, ok := any(data).(ProducerHook[T]); ok {
-		record = data.ProducerHook(record)
+		record = data.ProduceHook(record)
 	}
 
 	if record.Value != nil {

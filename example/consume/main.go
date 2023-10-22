@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/initializer"
 	"github.com/worldline-go/wkafka"
 )
@@ -16,28 +17,46 @@ var (
 		Brokers: []string{"localhost:9092"},
 	}
 	consumeConfig = wkafka.ConsumeConfig{
-		Topics:  []string{"test"},
-		GroupID: "test",
+		Topics:     []string{"test"},
+		GroupID:    "test1",
+		BatchCount: 2,
 	}
 )
 
-func callBack(ctx context.Context, msg map[string]interface{}) error {
-	record := wkafka.ContextRecord(ctx)
+type Data struct {
+	Test int `json:"test"`
 
-	slog.Info("callback", slog.Any("msg", msg), slog.String("topic", record.Topic), slog.String("key", string(record.Key)))
+	Metadata `json:"-"`
+}
+
+type Metadata struct {
+	Topic string
+	Key   []byte
+}
+
+type Processor struct{}
+
+func (Processor) Process(_ context.Context, msg []Data) error {
+	slog.Info("batch process", slog.Int("count", len(msg)))
+	for _, m := range msg {
+		slog.Info("callback", slog.Any("test", m.Test), slog.String("topic", m.Metadata.Topic), slog.String("key", string(m.Metadata.Key)))
+	}
 
 	return nil
 }
 
-func decode(data []byte) (map[string]interface{}, error) {
+func (Processor) DecodeWithRecord(data []byte, r *kgo.Record) (Data, error) {
 	if !json.Valid(data) {
-		return nil, wkafka.ErrSkip
+		return Data{}, wkafka.ErrSkip
 	}
 
-	var msg map[string]interface{}
+	var msg Data
 	if err := json.Unmarshal(data, &msg); err != nil {
-		return nil, err
+		return Data{}, err
 	}
+
+	msg.Metadata.Topic = r.Topic
+	msg.Metadata.Key = r.Key
 
 	return msg, nil
 }
@@ -47,7 +66,8 @@ func main() {
 }
 
 func run(ctx context.Context, _ *sync.WaitGroup) error {
-	client, err := wkafka.NewClient(kafkaConfig, wkafka.WithConsumer(consumeConfig, callBack, decode, nil))
+	p := Processor{}
+	client, err := wkafka.NewClient(kafkaConfig, wkafka.WithConsumerBatch(consumeConfig, p))
 	if err != nil {
 		return err
 	}

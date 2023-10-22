@@ -24,7 +24,7 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		opt(&o)
 	}
 
-	compressions, err := compressionOpts(cfg.Compression)
+	compressions, err := compressionOpts(cfg.Compressions)
 	if err != nil {
 		return nil, err
 	}
