@@ -9,9 +9,9 @@ const (
 	KeyRecord ctxKey = "kafka_record"
 )
 
-// ContextRecord returns the Record from the context in callback function.
+// GetRecord returns the Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
-func ContextRecord(ctx context.Context) *Record {
+func GetRecord(ctx context.Context) *Record {
 	if ctx == nil {
 		return nil
 	}

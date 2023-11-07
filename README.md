@@ -12,6 +12,8 @@ wkafka is a wrapper for kafka library to initialize and use for microservices.
 go get github.com/worldline-go/wkafka
 ```
 
+This library is using [franz-go](https://github.com/twmb/franz-go).
+
 ## Usage
 
 First set the connection config to create a new kafka client.  

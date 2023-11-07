@@ -14,11 +14,7 @@ type testData struct {
 	Details map[string]interface{}
 }
 
-func (d *testData) ProducerHook(r *Record) *Record {
-	if d == nil {
-		return r
-	}
-
+func (d *testData) ProduceHook(r *Record) {
 	r.Value = []byte(d.Name)
 	r.Headers = append(r.Headers, Header{
 		Key:   "name",
@@ -26,8 +22,6 @@ func (d *testData) ProducerHook(r *Record) *Record {
 	})
 	r.Key = []byte(d.Name)
 	r.Topic = d.Topic
-
-	return r
 }
 
 func Test_produce_Produce(t *testing.T) {
@@ -70,20 +64,6 @@ func Test_produce_Produce(t *testing.T) {
 
 						for i := range records {
 							switch i {
-							// case 0:
-							// 	assert.Equal(t, "test", records[i].Topic)
-							// 	assert.Nil(t, records[i].Key)
-							// 	assert.Nil(t, records[i].Value)
-							// 	assert.Equal(t, 1, len(records[i].Headers))
-							// 	assert.Equal(t, "server", records[i].Headers[0].Key)
-							// 	assert.Equal(t, "test", string(records[i].Headers[0].Value))
-							// case 1:
-							// 	assert.Equal(t, "test", records[i].Topic)
-							// 	assert.Nil(t, records[i].Key)
-							// 	assert.Equal(t, "test", string(records[i].Value))
-							// 	assert.Equal(t, 1, len(records[i].Headers))
-							// 	assert.Equal(t, "server", records[i].Headers[0].Key)
-							// 	assert.Equal(t, "test", string(records[i].Headers[0].Value))
 							case 0:
 								assert.Equal(t, "test", records[i].Topic)
 								assert.Equal(t, "test", string(records[i].Key))

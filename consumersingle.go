@@ -38,11 +38,15 @@ func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 		}
 
 		if !c.Cfg.Concurrent {
-			if err := c.singleIteration(ctx, cl, fetch); err != nil {
+			if err := c.iteration(ctx, cl, fetch); err != nil {
 				return err
 			}
 
 			continue
+		}
+
+		if err := c.concurrentIteration(ctx, cl, fetch); err != nil {
+			return err
 		}
 	}
 }
@@ -51,7 +55,7 @@ func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - CONCURRENT ITERATION
 /////////////////////////////////
 
-func (c consumerSingle[T]) singleConcurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	return nil
 }
 
@@ -59,11 +63,11 @@ func (c consumerSingle[T]) singleConcurrentIteration(ctx context.Context, cl *kg
 // SINGLE ITERATION
 ////////////////////
 
-func (c consumerSingle[T]) singleIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		if !skip(&c.Cfg, r) {
-			if err := c.singleIterationRecord(ctx, r); err != nil {
+			if err := c.iterationRecord(ctx, r); err != nil {
 				return wrapErr(r, err)
 			}
 		}
@@ -76,7 +80,7 @@ func (c consumerSingle[T]) singleIteration(ctx context.Context, cl *kgo.Client, 
 	return nil
 }
 
-func (c consumerSingle[T]) singleIterationRecord(ctx context.Context, r *kgo.Record) error {
+func (c consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
 	if c.PreCheck != nil {
 		if err := c.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {

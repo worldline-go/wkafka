@@ -16,8 +16,8 @@ type Producer[T any] interface {
 	Produce(ctx context.Context, data ...T) error
 }
 
-type ProducerHook[T any] interface {
-	ProduceHook(r *Record) *Record
+type ProducerHook interface {
+	ProduceHook(r *Record)
 }
 
 type ProducerConfig[T any] struct {
@@ -97,8 +97,8 @@ func (p *produce[T]) prepare(data T) (*Record, error) {
 	}
 
 	// check data has Hook interface
-	if data, ok := any(data).(ProducerHook[T]); ok {
-		record = data.ProduceHook(record)
+	if data, ok := any(data).(ProducerHook); ok {
+		data.ProduceHook(record)
 	}
 
 	if record.Value != nil {

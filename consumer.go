@@ -50,6 +50,15 @@ type ConsumeConfig struct {
 	BatchCount int `cfg:"batch_count"`
 }
 
+// WithConcurrent to run the consumer config with on/off concurrent mode.
+//
+// Concurrent should be set in the programmatic way.
+func (c ConsumeConfig) WithConcurrent(v bool) ConsumeConfig {
+	c.Concurrent = v
+
+	return c
+}
+
 type Offsets struct {
 	// Offsets is a list of offsets numbers in that partition to skip.
 	Offsets []int64 `cfg:"offsets"`
