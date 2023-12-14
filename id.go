@@ -6,11 +6,15 @@ import (
 	"path/filepath"
 )
 
-var DefaultClientID string
+var (
+	DefaultClientID string
+	idProgname      string
+	idHostname      string
+)
 
 func init() {
-	progname := filepath.Base(os.Args[0])
-	hostname, _ := os.Hostname()
+	idProgname = filepath.Base(os.Args[0])
+	idHostname, _ = os.Hostname()
 
-	DefaultClientID = fmt.Sprintf("%s@%s", progname, hostname)
+	DefaultClientID = fmt.Sprintf("%s@%s", idProgname, idHostname)
 }

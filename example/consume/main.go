@@ -14,7 +14,7 @@ import (
 
 var (
 	kafkaConfig = wkafka.Config{
-		Brokers: []string{"localhost:9095"},
+		Brokers: []string{"localhost:9092"},
 	}
 	consumeConfig = wkafka.ConsumeConfig{
 		Topics:     []string{"test"},
@@ -67,7 +67,11 @@ func main() {
 
 func run(ctx context.Context, _ *sync.WaitGroup) error {
 	p := Processor{}
-	client, err := wkafka.NewClient(ctx, kafkaConfig, wkafka.WithConsumerBatch(consumeConfig, p))
+	client, err := wkafka.NewClient(
+		ctx, kafkaConfig,
+		wkafka.WithConsumerBatch(consumeConfig, p),
+		wkafka.WithClientInfo("testapp", "v0.1.0"),
+	)
 	if err != nil {
 		return err
 	}

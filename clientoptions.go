@@ -9,6 +9,7 @@ import (
 type options struct {
 	Consumer          consumer
 	ClientID          string
+	InfoVersion       string
 	KGOOptions        []kgo.Opt
 	AutoTopicCreation bool
 }
@@ -22,6 +23,15 @@ type Option func(*options)
 func WithClientID(clientID string) Option {
 	return func(o *options) {
 		o.ClientID = clientID
+	}
+}
+
+// WithClientInfo to set client_id in kafka server.
+// Not usable with WithClientID option.
+//   - appname:version@hostname
+func WithClientInfo(name, version string) Option {
+	return func(o *options) {
+		o.ClientID = name + ":" + version + "@" + idHostname
 	}
 }
 
