@@ -1,6 +1,7 @@
 package tkafka
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -28,5 +29,5 @@ func Config() wkafka.Config {
 }
 
 func TestClient() (*wkafka.Client, error) {
-	return wkafka.NewClient(Config())
+	return wkafka.NewClient(context.Background(), Config())
 }

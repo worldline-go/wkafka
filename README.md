@@ -46,7 +46,7 @@ For creating a consumer we need to give config while creating a client with a pr
 
 ### Producer
 
-Use consumer client or create without consumer settings.
+Use consumer client or create without consumer settings, `NewClient` also try to connect to brokers.
 
 ```go
 client, err := wkafka.NewClient(kafkaConfig)

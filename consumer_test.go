@@ -233,6 +233,7 @@ func Test_GroupConsuming(t *testing.T) {
 			for _, c := range tt.consumers {
 				process := p.SetWait(c.MessageWait).SetClientID(c.ClientID)
 				client, err := wkafka.NewClient(
+					ctx,
 					tkafka.Config(),
 					wkafka.WithClientID(c.ClientID),
 					wkafka.WithConsumer(c.Config, process),

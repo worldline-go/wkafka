@@ -20,7 +20,7 @@ func main() {
 }
 
 func run(ctx context.Context, _ *sync.WaitGroup) error {
-	client, err := wkafka.NewClient(kafkaConfig)
+	client, err := wkafka.NewClient(ctx, kafkaConfig)
 	if err != nil {
 		return err
 	}

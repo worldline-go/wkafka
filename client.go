@@ -15,7 +15,7 @@ type Client struct {
 	Consumer consumer
 }
 
-func NewClient(cfg Config, opts ...Option) (*Client, error) {
+func NewClient(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	o := options{
 		ClientID:          DefaultClientID,
 		AutoTopicCreation: true,
@@ -94,6 +94,10 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		Kafka:    kgoClient,
 		Consumer: o.Consumer,
 		clientID: []byte(o.ClientID),
+	}
+
+	if err := cl.Kafka.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("connection to kafka brokers: %w", err)
 	}
 
 	return cl, nil
