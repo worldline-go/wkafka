@@ -20,11 +20,7 @@ type Data struct {
 	Details map[string]interface{}
 }
 
-func (d *Data) ProducerHook(r *wkafka.Record) *wkafka.Record {
-	if d == nil {
-		return r
-	}
-
+func (d *Data) ProduceHook(r *wkafka.Record) {
 	r.Value = []byte(d.Name)
 	r.Headers = append(r.Headers, wkafka.Header{
 		Key:   "name",
@@ -32,8 +28,6 @@ func (d *Data) ProducerHook(r *wkafka.Record) *wkafka.Record {
 	})
 	r.Key = []byte(d.Name)
 	r.Topic = d.Topic
-
-	return r
 }
 
 func main() {

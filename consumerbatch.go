@@ -8,6 +8,37 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+type optionBatch struct {
+	DisableCommit bool
+	// Concurrent to run the consumer in concurrent mode for each partition and topic.
+	//  - Default is false.
+	//  - Each topic could have different type of value so use with processor map.
+	Concurrent bool `cfg:"concurrent"`
+}
+
+type OptionBatch func(*optionBatch)
+
+func (o *optionBatch) apply(opts ...OptionBatch) {
+	for _, opt := range opts {
+		opt(o)
+	}
+}
+
+// WithBatchDisableCommit to set wkafka consumer's commit messages.
+//   - Need to run manually commit messages command.
+//   - Use this option only what you know what you are doing!
+func WithBatchDisableCommit() OptionBatch {
+	return func(o *optionBatch) {
+		o.DisableCommit = true
+	}
+}
+
+func WithBatchConcurrent() OptionBatch {
+	return func(o *optionBatch) {
+		o.Concurrent = true
+	}
+}
+
 type consumerBatch[T any] struct {
 	Process          func(ctx context.Context, msg []T) error
 	Cfg              ConsumeConfig
@@ -15,6 +46,7 @@ type consumerBatch[T any] struct {
 	DecodeWithRecord func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck func(ctx context.Context, r *kgo.Record) error
+	Option   optionBatch
 }
 
 func (c consumerBatch[T]) config() ConsumeConfig {
@@ -37,7 +69,7 @@ func (c consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		if !c.Cfg.Concurrent {
+		if !c.Option.Concurrent {
 			if err := c.batchIteration(ctx, cl, fetch); err != nil {
 				return err
 			}
@@ -100,8 +132,10 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 		batch = make([]T, 0, c.Cfg.BatchCount)
 	}
 
-	if err := cl.CommitRecords(ctx, records...); err != nil {
-		return fmt.Errorf("commit batch records failed: %w", err)
+	if !c.Option.DisableCommit {
+		if err := cl.CommitRecords(ctx, records...); err != nil {
+			return fmt.Errorf("commit batch records failed: %w", err)
+		}
 	}
 
 	return nil

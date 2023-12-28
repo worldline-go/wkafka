@@ -2,6 +2,8 @@ package wkafka
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -39,24 +41,38 @@ type ConsumeConfig struct {
 	//  - Default is max.poll.records in the broker configuration, usually 500.
 	//  - Fetching messages from broker, this is not related with batch processing!
 	MaxPollRecords int `cfg:"max_poll_records"`
-	// Concurrent to run the consumer in concurrent mode for each partition and topic.
-	//  - Default is false.
-	//  - Each topic could have different type of value so use with processor map.
-	Concurrent bool `cfg:"concurrent"`
 	// BatchCount is a number of messages processed in a single batch.
 	//  - <= 1 is 1 message per batch.
 	//  - Processing count could be less than BatchCount if the batch is not full.
 	//  - Usable with WithConsumerBatch
 	BatchCount int `cfg:"batch_count"`
+
+	Validation Validation `cfg:"validation"`
 }
 
-// WithConcurrent to run the consumer config with on/off concurrent mode.
-//
-// Concurrent should be set in the programmatic way.
-func (c ConsumeConfig) WithConcurrent(v bool) ConsumeConfig {
-	c.Concurrent = v
+// Validation is a configuration for validation when consumer initialized.
+type Validation struct {
+	// GroupID is a regex pattern to validate GroupID.
+	GroupID string `cfg:"group_id"`
+}
 
-	return c
+func (c ConsumeConfig) Validate() error {
+	if c.GroupID == "" {
+		return fmt.Errorf("group_id is required")
+	}
+
+	if c.Validation.GroupID != "" {
+		rgx, err := regexp.Compile(c.Validation.GroupID)
+		if err != nil {
+			return fmt.Errorf("group_id validation regex: %w", err)
+		}
+
+		if !rgx.MatchString(c.GroupID) {
+			return fmt.Errorf("group_id validation failed regex [%s], value [%s]", c.Validation.GroupID, c.GroupID)
+		}
+	}
+
+	return nil
 }
 
 type Offsets struct {

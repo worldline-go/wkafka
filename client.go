@@ -61,6 +61,12 @@ func NewClient(ctx context.Context, cfg Config, opts ...Option) (*Client, error)
 
 	if o.Consumer != nil {
 		lConfig := o.Consumer.config()
+
+		// validate consumer
+		if err := lConfig.Validate(); err != nil {
+			return nil, fmt.Errorf("validate consumer config: %w", err)
+		}
+
 		// start offset settings
 		startOffset := kgo.NewOffset()
 		switch v := lConfig.StartOffset; {

@@ -6,6 +6,9 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// DefaultBatchCount is default batch count for batch consumer, if not set.
+var DefaultBatchCount = 100
+
 type options struct {
 	Consumer          consumer
 	ClientID          string
@@ -57,6 +60,7 @@ func WithKGOOptions(opts ...kgo.Opt) Option {
 func WithConsumer[T any](
 	cfg ConsumeConfig,
 	processor Processor[T],
+	opts ...OptionSingle,
 ) Option {
 	return func(o *options) {
 		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
@@ -77,12 +81,17 @@ func WithConsumer[T any](
 			precheck = v.PreCheck
 		}
 
+		// additional options
+		opt := optionSingle{}
+		opt.apply(opts...)
+
 		o.Consumer = consumerSingle[T]{
 			Process:          processor.Process,
 			Cfg:              cfg,
 			PreCheck:         precheck,
 			DecodeWithRecord: decodeWithRecord,
 			Decode:           decode,
+			Option:           opt,
 		}
 	}
 }
@@ -91,6 +100,7 @@ func WithConsumer[T any](
 func WithConsumerBatch[T any](
 	cfg ConsumeConfig,
 	processor Processor[[]T],
+	opts ...OptionBatch,
 ) Option {
 	return func(o *options) {
 		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
@@ -112,8 +122,12 @@ func WithConsumerBatch[T any](
 		}
 
 		if cfg.BatchCount <= 0 {
-			cfg.BatchCount = 1
+			cfg.BatchCount = DefaultBatchCount
 		}
+
+		// additional options
+		opt := optionBatch{}
+		opt.apply(opts...)
 
 		o.Consumer = consumerBatch[T]{
 			Process:          processor.Process,
@@ -121,6 +135,7 @@ func WithConsumerBatch[T any](
 			PreCheck:         precheck,
 			DecodeWithRecord: decodeWithRecord,
 			Decode:           decode,
+			Option:           opt,
 		}
 	}
 }

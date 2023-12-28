@@ -8,6 +8,37 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+type optionSingle struct {
+	DisableCommit bool
+	// Concurrent to run the consumer in concurrent mode for each partition and topic.
+	//  - Default is false.
+	//  - Each topic could have different type of value so use with processor map.
+	Concurrent bool `cfg:"concurrent"`
+}
+
+type OptionSingle func(*optionSingle)
+
+func (o *optionSingle) apply(opts ...OptionSingle) {
+	for _, opt := range opts {
+		opt(o)
+	}
+}
+
+// WithSingleDisableCommit to set wkafka consumer's commit messages.
+//   - Need to run manually commit messages command.
+//   - Use this option only what you know what you are doing!
+func WithSingleDisableCommit() OptionBatch {
+	return func(o *optionBatch) {
+		o.DisableCommit = true
+	}
+}
+
+func WithSingleConcurrent() OptionBatch {
+	return func(o *optionBatch) {
+		o.Concurrent = true
+	}
+}
+
 type consumerSingle[T any] struct {
 	Process          func(ctx context.Context, msg T) error
 	Cfg              ConsumeConfig
@@ -15,6 +46,7 @@ type consumerSingle[T any] struct {
 	DecodeWithRecord func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck func(ctx context.Context, r *kgo.Record) error
+	Option   optionSingle
 }
 
 func (c consumerSingle[T]) config() ConsumeConfig {
@@ -37,7 +69,7 @@ func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		if !c.Cfg.Concurrent {
+		if !c.Option.Concurrent {
 			if err := c.iteration(ctx, cl, fetch); err != nil {
 				return err
 			}
@@ -72,8 +104,10 @@ func (c consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch 
 			}
 		}
 
-		if err := cl.CommitRecords(ctx, r); err != nil {
-			return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
+		if !c.Option.DisableCommit {
+			if err := cl.CommitRecords(ctx, r); err != nil {
+				return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
+			}
 		}
 	}
 
