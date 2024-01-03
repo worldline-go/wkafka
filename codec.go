@@ -52,7 +52,7 @@ func (codecJSON[T]) Encode(data T) ([]byte, error) {
 	return json.Marshal(data)
 }
 
-func (codecJSON[T]) Decode(raw []byte) (T, error) {
+func (codecJSON[T]) Decode(raw []byte, _ *kgo.Record) (T, error) {
 	var data T
 	err := json.Unmarshal(raw, &data)
 	if err != nil {

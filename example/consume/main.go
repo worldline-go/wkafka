@@ -16,7 +16,7 @@ var (
 	kafkaConfig = wkafka.Config{
 		Brokers: []string{"localhost:9092"},
 	}
-	consumeConfig = wkafka.ConsumeConfig{
+	consumeConfig = wkafka.ConsumerConfig{
 		Topics:     []string{"test"},
 		GroupID:    "test1",
 		BatchCount: 2,
@@ -45,7 +45,7 @@ func (Processor) Process(_ context.Context, msg []Data) error {
 	return nil
 }
 
-func (Processor) DecodeWithRecord(data []byte, r *kgo.Record) (Data, error) {
+func (Processor) Decode(data []byte, r *kgo.Record) (Data, error) {
 	if !json.Valid(data) {
 		return Data{}, wkafka.ErrSkip
 	}
@@ -67,9 +67,10 @@ func main() {
 
 func run(ctx context.Context, _ *sync.WaitGroup) error {
 	p := Processor{}
-	client, err := wkafka.NewClient(
+
+	client, err := wkafka.New(
 		ctx, kafkaConfig,
-		wkafka.WithConsumerBatch(consumeConfig, p),
+		wkafka.WithConsumer(consumeConfig),
 		wkafka.WithClientInfo("testapp", "v0.1.0"),
 	)
 	if err != nil {
@@ -78,7 +79,10 @@ func run(ctx context.Context, _ *sync.WaitGroup) error {
 
 	defer client.Close()
 
-	if err := client.Consume(ctx); err != nil {
+	if err := client.Consume(ctx,
+		wkafka.WithCallbackBatch(p.Process),
+		wkafka.WithDecode(p.Decode),
+	); err != nil {
 		return fmt.Errorf("consume: %w", err)
 	}
 

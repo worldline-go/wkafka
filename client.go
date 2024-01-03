@@ -12,10 +12,10 @@ type Client struct {
 	Kafka *kgo.Client
 
 	clientID []byte
-	Consumer consumer
+	consumer consumer
 }
 
-func NewClient(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
+func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	o := options{
 		ClientID:          DefaultClientID,
 		AutoTopicCreation: true,
@@ -59,30 +59,28 @@ func NewClient(ctx context.Context, cfg Config, opts ...Option) (*Client, error)
 		kgoOpt = append(kgoOpt, kgo.SASL(saslOpts...))
 	}
 
-	if o.Consumer != nil {
-		lConfig := o.Consumer.config()
-
+	if o.ConsumerEnabled {
 		// validate consumer
-		if err := lConfig.Validate(); err != nil {
+		if err := cfg.Consumer.Validation.Validate(o.ConsumerConfig); err != nil {
 			return nil, fmt.Errorf("validate consumer config: %w", err)
 		}
 
 		// start offset settings
 		startOffset := kgo.NewOffset()
-		switch v := lConfig.StartOffset; {
+		switch v := o.ConsumerConfig.StartOffset; {
 		case v == 0 || v == -2 || v < -2:
 			startOffset = startOffset.AtStart()
 		case v == -1:
 			startOffset = startOffset.AtEnd()
 		default:
-			startOffset = startOffset.At(lConfig.StartOffset)
+			startOffset = startOffset.At(o.ConsumerConfig.StartOffset)
 		}
 
 		kgoOpt = append(kgoOpt,
 			kgo.DisableAutoCommit(),
 			kgo.RequireStableFetchOffsets(),
-			kgo.ConsumerGroup(lConfig.GroupID),
-			kgo.ConsumeTopics(lConfig.Topics...),
+			kgo.ConsumerGroup(o.ConsumerConfig.GroupID),
+			kgo.ConsumeTopics(o.ConsumerConfig.Topics...),
 			kgo.ConsumeResetOffset(startOffset),
 		)
 	}
@@ -98,7 +96,6 @@ func NewClient(ctx context.Context, cfg Config, opts ...Option) (*Client, error)
 
 	cl := &Client{
 		Kafka:    kgoClient,
-		Consumer: o.Consumer,
 		clientID: []byte(o.ClientID),
 	}
 
@@ -115,24 +112,34 @@ func (c *Client) Close() {
 	}
 }
 
-func (c *Client) Consume(ctx context.Context) error {
-	if c.Consumer == nil {
+// Consume starts consuming messages from kafka.
+//   - Only works if client is created with consumer config.
+func (c *Client) Consume(ctx context.Context, opts ...OptionConsumer) error {
+	o := optionConsumer{}
+	if err := o.apply(opts...); err != nil {
+		return err
+	}
+
+	c.consumer = o.Consumer
+	if c.consumer == nil {
 		return fmt.Errorf("consumer is nil: %w", ErrNotImplemented)
 	}
 
-	if err := c.Consumer.Consume(ctx, c.Kafka); err != nil {
+	if err := c.consumer.Consume(ctx, c.Kafka); err != nil {
 		return fmt.Errorf("failed to consume: %w", err)
 	}
 
 	return nil
 }
 
+// Produce sends a message to kafka. For type producer check wkafka.NewProducer.
 func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 	result := c.Kafka.ProduceSync(ctx, records...)
 
 	return result.FirstErr()
 }
 
+// Admin returns an admin client to manage kafka.
 func (c *Client) Admin() *kadm.Client {
 	return kadm.NewClient(c.Kafka)
 }

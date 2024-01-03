@@ -133,7 +133,7 @@ func Test_GroupConsuming(t *testing.T) {
 
 	type consumers struct {
 		ClientID    string
-		Config      wkafka.ConsumeConfig
+		Config      wkafka.ConsumerConfig
 		Wait        time.Duration
 		MessageWait time.Duration
 	}
@@ -148,14 +148,14 @@ func Test_GroupConsuming(t *testing.T) {
 			consumers: []consumers{
 				{
 					ClientID: "test-1",
-					Config: wkafka.ConsumeConfig{
+					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
 						GroupID: "test-consuming",
 					},
 				},
 				{
 					ClientID: "test-2",
-					Config: wkafka.ConsumeConfig{
+					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
 						GroupID: "test-consuming",
 					},
@@ -168,7 +168,7 @@ func Test_GroupConsuming(t *testing.T) {
 			consumers: []consumers{
 				{
 					ClientID: "test-after-1",
-					Config: wkafka.ConsumeConfig{
+					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
 						GroupID: "test-consuming-after",
 					},
@@ -176,7 +176,7 @@ func Test_GroupConsuming(t *testing.T) {
 				},
 				{
 					ClientID: "test-after-2",
-					Config: wkafka.ConsumeConfig{
+					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
 						GroupID: "test-consuming-after",
 					},
@@ -226,17 +226,18 @@ func Test_GroupConsuming(t *testing.T) {
 			type clientHold struct {
 				Client   *wkafka.Client
 				ClientID string
+				Process  func(ctx context.Context, msg Data) error
 				Wait     time.Duration
 			}
 
 			clients := make([]clientHold, 0, len(tt.consumers))
 			for _, c := range tt.consumers {
 				process := p.SetWait(c.MessageWait).SetClientID(c.ClientID)
-				client, err := wkafka.NewClient(
+				client, err := wkafka.New(
 					ctx,
 					tkafka.Config(),
 					wkafka.WithClientID(c.ClientID),
-					wkafka.WithConsumer(c.Config, process),
+					wkafka.WithConsumer(c.Config),
 				)
 				if err != nil {
 					t.Fatalf("NewClient() error = %v", err)
@@ -258,6 +259,7 @@ func Test_GroupConsuming(t *testing.T) {
 
 				clients = append(clients, clientHold{
 					Client:   client,
+					Process:  process.Process,
 					ClientID: c.ClientID,
 					Wait:     c.Wait,
 				})
@@ -277,7 +279,7 @@ func Test_GroupConsuming(t *testing.T) {
 					}
 
 					slog.Info("start consuming", slog.String("client_id", cPass.ClientID))
-					if err := cPass.Client.Consume(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					if err := cPass.Client.Consume(ctx, wkafka.WithCallback(cPass.Process)); err != nil && !errors.Is(err, context.Canceled) {
 						t.Errorf("Consume() error = %v", err)
 					}
 				}(c)

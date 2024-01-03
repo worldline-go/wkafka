@@ -8,49 +8,17 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-type optionBatch struct {
-	DisableCommit bool
-	// Concurrent to run the consumer in concurrent mode for each partition and topic.
-	//  - Default is false.
-	//  - Each topic could have different type of value so use with processor map.
-	Concurrent bool `cfg:"concurrent"`
-}
-
-type OptionBatch func(*optionBatch)
-
-func (o *optionBatch) apply(opts ...OptionBatch) {
-	for _, opt := range opts {
-		opt(o)
-	}
-}
-
-// WithBatchDisableCommit to set wkafka consumer's commit messages.
-//   - Need to run manually commit messages command.
-//   - Use this option only what you know what you are doing!
-func WithBatchDisableCommit() OptionBatch {
-	return func(o *optionBatch) {
-		o.DisableCommit = true
-	}
-}
-
-func WithBatchConcurrent() OptionBatch {
-	return func(o *optionBatch) {
-		o.Concurrent = true
-	}
-}
-
 type consumerBatch[T any] struct {
-	Process          func(ctx context.Context, msg []T) error
-	Cfg              ConsumeConfig
-	Decode           func(raw []byte) (T, error)
-	DecodeWithRecord func(raw []byte, r *kgo.Record) (T, error)
+	Process func(ctx context.Context, msg []T) error
+	Cfg     ConsumerConfig
+	Decode  func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck func(ctx context.Context, r *kgo.Record) error
-	Option   optionBatch
+	Option   optionConsumer
 }
 
-func (c consumerBatch[T]) config() ConsumeConfig {
-	return c.Cfg
+func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
+	c.PreCheck = fn
 }
 
 func (c consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
@@ -76,12 +44,34 @@ func (c consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 
 			continue
 		}
+
+		if err := c.concurrentIteration(ctx, cl, fetch); err != nil {
+			return err
+		}
 	}
 }
+
+/////////////////////////////////
+// BATCH - CONCURRENT ITERATION
+/////////////////////////////////
+
+func (c consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+	return nil
+}
+
+/////////////////////////////////
+// BATCH - ITERATION
+/////////////////////////////////
 
 func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	batch := make([]T, 0, c.Cfg.BatchCount)
 	records := make([]*kgo.Record, 0, c.Cfg.BatchCount)
+
+	batchCount := c.Cfg.BatchCount
+	if v := fetch.NumRecords(); v < c.Cfg.BatchCount {
+		batchCount = v
+	}
+
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		records = append(records, r)
@@ -96,32 +86,18 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 			}
 		}
 
-		var v T
-		if c.DecodeWithRecord != nil {
-			var err error
-			v, err = c.DecodeWithRecord(r.Value, r)
-			if err != nil {
-				if errors.Is(err, ErrSkip) {
-					continue
-				}
-
-				return fmt.Errorf("decode record with record failed: %w", err)
+		data, err := c.Decode(r.Value, r)
+		if err != nil {
+			if errors.Is(err, ErrSkip) {
+				return nil
 			}
-		} else {
-			var err error
-			v, err = c.Decode(r.Value)
-			if err != nil {
-				if errors.Is(err, ErrSkip) {
-					continue
-				}
 
-				return fmt.Errorf("decode record failed: %w", err)
-			}
+			return fmt.Errorf("decode record failed: %w", err)
 		}
 
-		batch = append(batch, v)
+		batch = append(batch, data)
 
-		if len(batch) < c.Cfg.BatchCount {
+		if len(batch) < batchCount {
 			continue
 		}
 
@@ -129,7 +105,7 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 			return fmt.Errorf("process batch failed: %w", err)
 		}
 
-		batch = make([]T, 0, c.Cfg.BatchCount)
+		batch = make([]T, 0, batchCount)
 	}
 
 	if !c.Option.DisableCommit {

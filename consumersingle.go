@@ -8,49 +8,17 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-type optionSingle struct {
-	DisableCommit bool
-	// Concurrent to run the consumer in concurrent mode for each partition and topic.
-	//  - Default is false.
-	//  - Each topic could have different type of value so use with processor map.
-	Concurrent bool `cfg:"concurrent"`
-}
-
-type OptionSingle func(*optionSingle)
-
-func (o *optionSingle) apply(opts ...OptionSingle) {
-	for _, opt := range opts {
-		opt(o)
-	}
-}
-
-// WithSingleDisableCommit to set wkafka consumer's commit messages.
-//   - Need to run manually commit messages command.
-//   - Use this option only what you know what you are doing!
-func WithSingleDisableCommit() OptionBatch {
-	return func(o *optionBatch) {
-		o.DisableCommit = true
-	}
-}
-
-func WithSingleConcurrent() OptionBatch {
-	return func(o *optionBatch) {
-		o.Concurrent = true
-	}
-}
-
 type consumerSingle[T any] struct {
-	Process          func(ctx context.Context, msg T) error
-	Cfg              ConsumeConfig
-	Decode           func(raw []byte) (T, error)
-	DecodeWithRecord func(raw []byte, r *kgo.Record) (T, error)
+	Process func(ctx context.Context, msg T) error
+	Cfg     ConsumerConfig
+	Decode  func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck func(ctx context.Context, r *kgo.Record) error
-	Option   optionSingle
+	Option   optionConsumer
 }
 
-func (c consumerSingle[T]) config() ConsumeConfig {
-	return c.Cfg
+func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
+	c.PreCheck = fn
 }
 
 func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
@@ -92,7 +60,7 @@ func (c consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Clie
 }
 
 ////////////////////
-// SINGLE ITERATION
+// SINGLE - ITERATION
 ////////////////////
 
 func (c consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
@@ -125,27 +93,13 @@ func (c consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) e
 		}
 	}
 
-	var data T
-	if c.DecodeWithRecord != nil {
-		var err error
-		data, err = c.DecodeWithRecord(r.Value, r)
-		if err != nil {
-			if errors.Is(err, ErrSkip) {
-				return nil
-			}
-
-			return fmt.Errorf("decode record with record failed: %w", err)
+	data, err := c.Decode(r.Value, r)
+	if err != nil {
+		if errors.Is(err, ErrSkip) {
+			return nil
 		}
-	} else {
-		var err error
-		data, err = c.Decode(r.Value)
-		if err != nil {
-			if errors.Is(err, ErrSkip) {
-				return nil
-			}
 
-			return fmt.Errorf("decode record failed: %w", err)
-		}
+		return fmt.Errorf("decode record failed: %w", err)
 	}
 
 	ctxCallback := context.WithValue(ctx, KeyRecord, r)

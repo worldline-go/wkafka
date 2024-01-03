@@ -1,8 +1,6 @@
 package wkafka
 
 import (
-	"context"
-
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -10,7 +8,9 @@ import (
 var DefaultBatchCount = 100
 
 type options struct {
-	Consumer          consumer
+	ConsumerEnabled bool
+	ConsumerConfig  ConsumerConfig
+	// Consumer          consumer
 	ClientID          string
 	InfoVersion       string
 	KGOOptions        []kgo.Opt
@@ -56,86 +56,93 @@ func WithKGOOptions(opts ...kgo.Opt) Option {
 	}
 }
 
-// WithConsumer sets the listener to use.
-func WithConsumer[T any](
-	cfg ConsumeConfig,
-	processor Processor[T],
-	opts ...OptionSingle,
-) Option {
+func WithConsumer(cfg ConsumerConfig) Option {
 	return func(o *options) {
-		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
-		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
-			decodeWithRecord = v.DecodeWithRecord
-		}
-
-		var decode func([]byte) (T, error)
-		if decodeWithRecord == nil {
-			decode = codecJSON[T]{}.Decode
-			if v, ok := processor.(ProcessorDecode[T]); ok {
-				decode = v.Decode
-			}
-		}
-
-		var precheck func(context.Context, *kgo.Record) error
-		if v, ok := processor.(ProcessorPreCheck); ok {
-			precheck = v.PreCheck
-		}
-
-		// additional options
-		opt := optionSingle{}
-		opt.apply(opts...)
-
-		o.Consumer = consumerSingle[T]{
-			Process:          processor.Process,
-			Cfg:              cfg,
-			PreCheck:         precheck,
-			DecodeWithRecord: decodeWithRecord,
-			Decode:           decode,
-			Option:           opt,
-		}
+		o.ConsumerConfig = cfg
+		o.ConsumerEnabled = true
 	}
 }
 
 // WithConsumer sets the listener to use.
-func WithConsumerBatch[T any](
-	cfg ConsumeConfig,
-	processor Processor[[]T],
-	opts ...OptionBatch,
-) Option {
-	return func(o *options) {
-		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
-		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
-			decodeWithRecord = v.DecodeWithRecord
-		}
+// func WithConsumer[T any](
+// 	cfg ConsumeConfig,
+// 	processor Processor[T],
+// 	opts ...OptionSingle,
+// ) Option {
+// 	return func(o *options) {
+// 		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
+// 		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
+// 			decodeWithRecord = v.DecodeWithRecord
+// 		}
 
-		var decode func([]byte) (T, error)
-		if decodeWithRecord == nil {
-			decode = codecJSON[T]{}.Decode
-			if v, ok := processor.(ProcessorDecode[T]); ok {
-				decode = v.Decode
-			}
-		}
+// 		var decode func([]byte) (T, error)
+// 		if decodeWithRecord == nil {
+// 			decode = codecJSON[T]{}.Decode
+// 			if v, ok := processor.(ProcessorDecode[T]); ok {
+// 				decode = v.Decode
+// 			}
+// 		}
 
-		var precheck func(context.Context, *kgo.Record) error
-		if v, ok := processor.(ProcessorPreCheck); ok {
-			precheck = v.PreCheck
-		}
+// 		var precheck func(context.Context, *kgo.Record) error
+// 		if v, ok := processor.(ProcessorPreCheck); ok {
+// 			precheck = v.PreCheck
+// 		}
 
-		if cfg.BatchCount <= 0 {
-			cfg.BatchCount = DefaultBatchCount
-		}
+// 		// additional options
+// 		opt := optionSingle{}
+// 		opt.apply(opts...)
 
-		// additional options
-		opt := optionBatch{}
-		opt.apply(opts...)
+// 		o.Consumer = consumerSingle[T]{
+// 			Process:          processor.Process,
+// 			Cfg:              cfg,
+// 			PreCheck:         precheck,
+// 			DecodeWithRecord: decodeWithRecord,
+// 			Decode:           decode,
+// 			Option:           opt,
+// 		}
+// 	}
+// }
 
-		o.Consumer = consumerBatch[T]{
-			Process:          processor.Process,
-			Cfg:              cfg,
-			PreCheck:         precheck,
-			DecodeWithRecord: decodeWithRecord,
-			Decode:           decode,
-			Option:           opt,
-		}
-	}
-}
+// WithConsumer sets the listener to use.
+// func WithConsumerBatch[T any](
+// 	cfg ConsumerConfig,
+// 	processor Processor[[]T],
+// 	opts ...OptionBatch,
+// ) Option {
+// 	return func(o *options) {
+// 		var decodeWithRecord func([]byte, *kgo.Record) (T, error)
+// 		if v, ok := processor.(ProcessorDecodeWithRecord[T]); ok {
+// 			decodeWithRecord = v.DecodeWithRecord
+// 		}
+
+// 		var decode func([]byte) (T, error)
+// 		if decodeWithRecord == nil {
+// 			decode = codecJSON[T]{}.Decode
+// 			if v, ok := processor.(ProcessorDecode[T]); ok {
+// 				decode = v.Decode
+// 			}
+// 		}
+
+// 		var precheck func(context.Context, *kgo.Record) error
+// 		if v, ok := processor.(ProcessorPreCheck); ok {
+// 			precheck = v.PreCheck
+// 		}
+
+// 		if cfg.BatchCount <= 0 {
+// 			cfg.BatchCount = DefaultBatchCount
+// 		}
+
+// 		// additional options
+// 		opt := optionBatch{}
+// 		opt.apply(opts...)
+
+// 		o.Consumer = consumerBatch[T]{
+// 			Process:          processor.Process,
+// 			Cfg:              cfg,
+// 			PreCheck:         precheck,
+// 			DecodeWithRecord: decodeWithRecord,
+// 			Decode:           decode,
+// 			Option:           opt,
+// 		}
+// 	}
+// }
