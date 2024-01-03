@@ -132,6 +132,9 @@ func (o *optionConsumer) apply(opts ...OptionConsumer) error {
 	return nil
 }
 
+// WithCallbackBatch to set wkafka consumer's callback function.
+//   - Default is json.Unmarshal, use WithDecode option to add custom decode function.
+//   - If [][]byte then default decode function will be skipped.
 func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) OptionConsumer {
 	return func(o *optionConsumer) error {
 		o.Consumer = &consumerBatch[T]{
@@ -143,11 +146,24 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) Optio
 	}
 }
 
+// WithCallback to set wkafka consumer's callback function.
+//   - Default is json.Unmarshal, use WithDecode option to add custom decode function.
+//   - If []byte then default decode function will be skipped.
 func WithCallback[T any](fn func(ctx context.Context, msg T) error) OptionConsumer {
 	return func(o *optionConsumer) error {
+		var decode func(raw []byte, r *kgo.Record) (T, error)
+
+		var msg T
+		switch any(msg).(type) {
+		case []byte:
+			decode = codecByte[T]{}.Decode
+		default:
+			decode = codecJSON[T]{}.Decode
+		}
+
 		o.Consumer = &consumerSingle[T]{
 			Process: fn,
-			Decode:  codecJSON[T]{}.Decode,
+			Decode:  decode,
 		}
 
 		return nil

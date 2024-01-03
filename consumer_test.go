@@ -113,9 +113,7 @@ func Test_GroupConsuming(t *testing.T) {
 
 	slog.Info("topic created", slog.String("topic", topic.Name))
 
-	byteProducer, err := wkafka.NewProducer(client, wkafka.ProducerConfig[Data]{
-		Topic: topic.Name,
-	})
+	byteProducer, err := wkafka.NewProducer[Data](client, topic.Name)
 	if err != nil {
 		t.Fatalf("NewProducer() error = %v", err)
 	}

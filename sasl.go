@@ -8,6 +8,11 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
+var (
+	ScramSha256 = "SCRAM-SHA-256"
+	ScramSha512 = "SCRAM-SHA-512"
+)
+
 type SaslConfigs []SalsConfig
 
 func (c SaslConfigs) Generate() ([]sasl.Mechanism, error) {
@@ -101,9 +106,9 @@ func (s SaslSCRAM) Generate() (sasl.Mechanism, error) {
 	}
 
 	switch s.Algorithm {
-	case "SCRAM-SHA-256":
+	case ScramSha256:
 		return auth.AsSha256Mechanism(), nil
-	case "SCRAM-SHA-512":
+	case ScramSha512:
 		return auth.AsSha512Mechanism(), nil
 	default:
 		return nil, fmt.Errorf("invalid algorithm %q", s.Algorithm)

@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -16,11 +17,7 @@ type Producer[T any] interface {
 	Produce(ctx context.Context, data ...T) error
 }
 
-type ProducerHook interface {
-	ProduceHook(r *Record)
-}
-
-type ProducerConfig[T any] struct {
+type producerConfig[T any] struct {
 	// Topic is the default topic to produce to.
 	Topic string
 	// Headers is the default headers to produce with it.
@@ -29,20 +26,67 @@ type ProducerConfig[T any] struct {
 	//  - If data is []byte, Encode will be ignored.
 	//  - This works after Hook and record.Value is nil.
 	Encode func(T) ([]byte, error)
+	// Hook is use to modify record before produce.
+	Hook func(T, *Record) error
 }
 
-func NewProducer[T any](client *Client, cfg ProducerConfig[T]) (Producer[T], error) {
+type OptionProducer[T any] func(*producerConfig[T]) error
+
+func (c *producerConfig[T]) apply(opts ...OptionProducer[T]) error {
+	for _, opt := range opts {
+		if err := opt(c); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// WithEncoder to set encoder function.
+func WithEncoder[T any](fn func(T) ([]byte, error)) OptionProducer[T] {
+	return func(o *producerConfig[T]) error {
+		o.Encode = fn
+
+		return nil
+	}
+}
+
+// WithHeaders to append headers.
+func WithHeaders[T any](headers ...Header) OptionProducer[T] {
+	return func(o *producerConfig[T]) error {
+		o.Headers = append(o.Headers, headers...)
+
+		return nil
+	}
+}
+
+// WithHook to set hook function.
+//   - Hook will be called before Encoder.
+//   - If Hook return ErrSkip, record will be skip.
+//   - If Hook not set any value to record, Encoder will be called.
+func WithHook[T any](fn func(T, *Record) error) OptionProducer[T] {
+	return func(o *producerConfig[T]) error {
+		o.Hook = fn
+
+		return nil
+	}
+}
+
+// NewProducer to create a new procuder with type.
+//   - If data is []byte, Encoder will be ignored.
+func NewProducer[T any](client *Client, topic string, opts ...OptionProducer[T]) (Producer[T], error) {
 	var encode func(data T) ([]byte, error)
 
 	var value T
 	switch any(value).(type) {
 	case []byte:
-		encode = nil
+		encode = codecByte[T]{}.Encode
 	default:
 		encode = codecJSON[T]{}.Encode
 	}
 
-	setCfg := ProducerConfig[T]{
+	setCfg := &producerConfig[T]{
+		Topic: topic,
 		Headers: []Header{
 			{
 				Key:   "server",
@@ -52,39 +96,35 @@ func NewProducer[T any](client *Client, cfg ProducerConfig[T]) (Producer[T], err
 		Encode: encode,
 	}
 
-	if cfg.Topic != "" {
-		setCfg.Topic = cfg.Topic
-	}
-
-	if cfg.Headers != nil {
-		setCfg.Headers = append(setCfg.Headers, cfg.Headers...)
-	}
-
-	if cfg.Encode != nil {
-		setCfg.Encode = cfg.Encode
+	if err := setCfg.apply(opts...); err != nil {
+		return nil, fmt.Errorf("apply options: %w", err)
 	}
 
 	return &produce[T]{
-		ProducerConfig: setCfg,
+		producerConfig: *setCfg,
 		produceRaw:     client.ProduceRaw,
 	}, nil
 }
 
 type produce[T any] struct {
-	ProducerConfig[T]
+	producerConfig[T]
 	produceRaw func(ctx context.Context, records []*Record) error
 }
 
 func (p *produce[T]) Produce(ctx context.Context, data ...T) error {
-	records := make([]*Record, len(data))
+	records := make([]*Record, 0, len(data))
 
-	for i, d := range data {
+	for _, d := range data {
 		record, err := p.prepare(d)
 		if err != nil {
+			if errors.Is(err, ErrSkip) {
+				continue
+			}
+
 			return fmt.Errorf("prepare record: %w", err)
 		}
 
-		records[i] = record
+		records = append(records, record)
 	}
 
 	return p.produceRaw(ctx, records)
@@ -96,9 +136,10 @@ func (p *produce[T]) prepare(data T) (*Record, error) {
 		Topic:   p.Topic,
 	}
 
-	// check data has Hook interface
-	if data, ok := any(data).(ProducerHook); ok {
-		data.ProduceHook(record)
+	if p.Hook != nil {
+		if err := p.Hook(data, record); err != nil {
+			return nil, err
+		}
 	}
 
 	if record.Value != nil {

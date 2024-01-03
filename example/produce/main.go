@@ -49,7 +49,7 @@ func run(ctx context.Context, _ *sync.WaitGroup) error {
 		},
 	}
 
-	producer, err := wkafka.NewProducer(client, wkafka.ProducerConfig[*Data]{})
+	producer, err := wkafka.NewProducer[*Data](client, "test")
 	if err != nil {
 		return err
 	}

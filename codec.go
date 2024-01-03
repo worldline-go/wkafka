@@ -61,3 +61,18 @@ func (codecJSON[T]) Decode(raw []byte, _ *kgo.Record) (T, error) {
 
 	return data, nil
 }
+
+type codecByte[T any] struct{}
+
+func (codecByte[T]) Encode(data T) ([]byte, error) {
+	v, ok := any(data).([]byte)
+	if !ok {
+		return nil, fmt.Errorf("invalid data type: %T", data)
+	}
+
+	return v, nil
+}
+
+func (codecByte[T]) Decode(raw []byte, _ *kgo.Record) (T, error) {
+	return any(raw).(T), nil
+}

@@ -26,7 +26,7 @@ func (d *testData) ProduceHook(r *Record) {
 
 func Test_produce_Produce(t *testing.T) {
 	type fields[T any] struct {
-		Config     ProducerConfig[T]
+		Config     producerConfig[T]
 		ProduceRaw func(t *testing.T) func(ctx context.Context, records []*kgo.Record) error
 	}
 	type args struct {
@@ -44,7 +44,7 @@ func Test_produce_Produce(t *testing.T) {
 		{
 			name: "test",
 			fields: fields[*testData]{
-				Config: ProducerConfig[*testData]{
+				Config: producerConfig[*testData]{
 					Topic: "test",
 					Headers: []Header{
 						{
@@ -97,7 +97,7 @@ func Test_produce_Produce(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &produce[*testData]{
-				ProducerConfig: tt.fields.Config,
+				producerConfig: tt.fields.Config,
 				produceRaw:     tt.fields.ProduceRaw(t),
 			}
 
@@ -110,7 +110,7 @@ func Test_produce_Produce(t *testing.T) {
 
 func BenchmarkProduce(b *testing.B) {
 	p := &produce[*testData]{
-		ProducerConfig: ProducerConfig[*testData]{
+		producerConfig: producerConfig[*testData]{
 			Topic: "test",
 			Headers: []Header{
 				{
