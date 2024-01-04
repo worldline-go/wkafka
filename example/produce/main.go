@@ -20,7 +20,7 @@ type Data struct {
 	Details map[string]interface{}
 }
 
-func (d *Data) ProduceHook(r *wkafka.Record) {
+func ProduceHook(d *Data, r *wkafka.Record) error {
 	r.Value = []byte(d.Name)
 	r.Headers = append(r.Headers, wkafka.Header{
 		Key:   "name",
@@ -28,6 +28,8 @@ func (d *Data) ProduceHook(r *wkafka.Record) {
 	})
 	r.Key = []byte(d.Name)
 	r.Topic = d.Topic
+
+	return nil
 }
 
 func main() {
@@ -49,7 +51,7 @@ func run(ctx context.Context, _ *sync.WaitGroup) error {
 		},
 	}
 
-	producer, err := wkafka.NewProducer[*Data](client, "test")
+	producer, err := wkafka.NewProducer[*Data](client, "test", wkafka.WithHook(ProduceHook))
 	if err != nil {
 		return err
 	}

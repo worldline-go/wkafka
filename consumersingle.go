@@ -13,8 +13,9 @@ type consumerSingle[T any] struct {
 	Cfg     ConsumerConfig
 	Decode  func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
-	PreCheck func(ctx context.Context, r *kgo.Record) error
-	Option   optionConsumer
+	PreCheck   func(ctx context.Context, r *kgo.Record) error
+	Option     optionConsumer
+	ProduceDLQ func(ctx context.Context, records []*kgo.Record) error
 }
 
 func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -68,14 +69,18 @@ func (c consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch 
 		r := iter.Next()
 		if !skip(&c.Cfg, r) {
 			if err := c.iterationRecord(ctx, r); err != nil {
-				return wrapErr(r, err)
+				if c.ProduceDLQ != nil && errors.Is(err, ErrDLQ) {
+					if err := c.ProduceDLQ(ctx, []*kgo.Record{r}); err != nil {
+						return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err))
+					}
+				} else {
+					return wrapErr(r, err)
+				}
 			}
 		}
 
-		if !c.Option.DisableCommit {
-			if err := cl.CommitRecords(ctx, r); err != nil {
-				return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
-			}
+		if err := cl.CommitRecords(ctx, r); err != nil {
+			return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
 		}
 	}
 
@@ -104,7 +109,7 @@ func (c consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) e
 
 	ctxCallback := context.WithValue(ctx, KeyRecord, r)
 	if err := c.Process(ctxCallback, data); err != nil {
-		return fmt.Errorf("callback failed: %w", err)
+		return err
 	}
 
 	return nil

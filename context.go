@@ -20,3 +20,13 @@ func GetRecord(ctx context.Context) *Record {
 
 	return record
 }
+
+func GetRecordBatch(ctx context.Context) []*Record {
+	if ctx == nil {
+		return nil
+	}
+
+	record, _ := ctx.Value(KeyRecord).([]*Record)
+
+	return record
+}

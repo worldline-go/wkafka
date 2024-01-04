@@ -96,9 +96,9 @@ func Test_produce_Produce(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &produce[*testData]{
-				producerConfig: tt.fields.Config,
-				produceRaw:     tt.fields.ProduceRaw(t),
+			p := &Producer[*testData]{
+				config:     tt.fields.Config,
+				produceRaw: tt.fields.ProduceRaw(t),
 			}
 
 			if err := p.Produce(tt.args.ctx, tt.args.data...); (err != nil) != tt.wantErr {
@@ -109,8 +109,8 @@ func Test_produce_Produce(t *testing.T) {
 }
 
 func BenchmarkProduce(b *testing.B) {
-	p := &produce[*testData]{
-		producerConfig: producerConfig[*testData]{
+	p := &Producer[*testData]{
+		config: producerConfig[*testData]{
 			Topic: "test",
 			Headers: []Header{
 				{

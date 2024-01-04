@@ -10,11 +10,12 @@ import (
 var (
 	ErrNotImplemented = fmt.Errorf("not implemented")
 	ErrClientClosed   = fmt.Errorf("client closed")
-	ErrNilData        = fmt.Errorf("nil data")
 	// ErrSkip is use to skip message in the PreCheck hook or Decode function.
 	ErrSkip = fmt.Errorf("skip message")
 	// ErrInvalidCompression for producer setting check.
 	ErrInvalidCompression = fmt.Errorf("invalid compression")
+	// ErrDLQ use with callback function to send message to DLQ topic.
+	ErrDLQ = fmt.Errorf("send to DLQ")
 )
 
 func wrapErr(r *kgo.Record, err error) error {

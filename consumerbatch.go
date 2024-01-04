@@ -13,8 +13,9 @@ type consumerBatch[T any] struct {
 	Cfg     ConsumerConfig
 	Decode  func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
-	PreCheck func(ctx context.Context, r *kgo.Record) error
-	Option   optionConsumer
+	PreCheck   func(ctx context.Context, r *kgo.Record) error
+	Option     optionConsumer
+	ProduceDLQ func(ctx context.Context, records []*kgo.Record) error
 }
 
 func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -64,14 +65,14 @@ func (c consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Clien
 /////////////////////////////////
 
 func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
-	batch := make([]T, 0, c.Cfg.BatchCount)
-	records := make([]*kgo.Record, 0, c.Cfg.BatchCount)
-
 	batchCount := c.Cfg.BatchCount
 	if v := fetch.NumRecords(); v < c.Cfg.BatchCount {
 		batchCount = v
 	}
 
+	batch := make([]T, 0, batchCount)
+	records := make([]*kgo.Record, 0, batchCount)
+	batchRecords := make([]*kgo.Record, 0, batchCount)
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		records = append(records, r)
@@ -79,7 +80,7 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 		if c.PreCheck != nil {
 			if err := c.PreCheck(ctx, r); err != nil {
 				if errors.Is(err, ErrSkip) {
-					return nil
+					continue
 				}
 
 				return fmt.Errorf("pre check failed: %w", err)
@@ -89,29 +90,38 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 		data, err := c.Decode(r.Value, r)
 		if err != nil {
 			if errors.Is(err, ErrSkip) {
-				return nil
+				continue
 			}
 
 			return fmt.Errorf("decode record failed: %w", err)
 		}
 
 		batch = append(batch, data)
+		batchRecords = append(batchRecords, r)
 
-		if len(batch) < batchCount {
+		if !iter.Done() && len(batch) < batchCount {
 			continue
 		}
 
-		if err := c.Process(ctx, batch); err != nil {
-			return fmt.Errorf("process batch failed: %w", err)
+		ctxCallback := context.WithValue(ctx, KeyRecord, batchRecords)
+
+		if err := c.Process(ctxCallback, batch); err != nil {
+			if c.ProduceDLQ != nil && errors.Is(err, ErrDLQ) {
+				if err := c.ProduceDLQ(ctx, []*kgo.Record{r}); err != nil {
+					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err))
+				}
+			} else {
+				return err
+			}
 		}
 
-		batch = make([]T, 0, batchCount)
-	}
-
-	if !c.Option.DisableCommit {
 		if err := cl.CommitRecords(ctx, records...); err != nil {
 			return fmt.Errorf("commit batch records failed: %w", err)
 		}
+
+		batch = make([]T, 0, batchCount)
+		batchRecords = make([]*kgo.Record, 0, batchCount)
+		records = make([]*kgo.Record, 0, batchCount)
 	}
 
 	return nil

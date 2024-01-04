@@ -45,14 +45,24 @@ type ConsumerConfig struct {
 	//  - Processing count could be less than BatchCount if the batch is not full.
 	//  - Usable with WithConsumerBatch
 	BatchCount int `cfg:"batch_count"`
-
+	// DLQ is a dead letter queue configuration.
 	DLQ DLQ `cfg:"dlq"`
 }
 
 type DLQ struct {
-	Enabled bool `cfg:"enabled"`
+	// Enable is a flag to enable DLQ.
+	Enable bool `cfg:"enable"`
+	// Skip are optional message offsets to be skipped.
+	//
+	// The format is a map of partition directyl and offsets.
+	//  0: // partition number
+	//    offsets: // list of offsets to skip
+	//      - 31
+	//      - 90
+	//    before: 20 // skip all offsets before or equal to this offset
+	Skip map[int32]Offsets `cfg:"skip"`
 	// Topic is a topic name to send messages that failed to process.
-	//  - Default is "dlq_finops_<APP_NAME>".
+	//  - Default is empty, no DLQ.
 	Topic string `cfg:"topic"`
 }
 
@@ -112,15 +122,19 @@ func skip(cfg *ConsumerConfig, r *kgo.Record) bool {
 }
 
 type optionConsumer struct {
-	Consumer      consumer
-	DisableCommit bool
+	Client         *Client
+	Consumer       consumer
+	ConsumerConfig ConsumerConfig
 	// Concurrent to run the consumer in concurrent mode for each partition and topic.
 	//  - Default is false.
 	//  - Each topic could have different type of value so use with processor map.
 	Concurrent bool `cfg:"concurrent"`
 }
 
-type OptionConsumer func(*optionConsumer) error
+type (
+	OptionConsumer func(*optionConsumer) error
+	CallBackFunc   func(*optionConsumer) error
+)
 
 func (o *optionConsumer) apply(opts ...OptionConsumer) error {
 	for _, opt := range opts {
@@ -135,11 +149,15 @@ func (o *optionConsumer) apply(opts ...OptionConsumer) error {
 // WithCallbackBatch to set wkafka consumer's callback function.
 //   - Default is json.Unmarshal, use WithDecode option to add custom decode function.
 //   - If [][]byte then default decode function will be skipped.
-func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) OptionConsumer {
+func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallBackFunc {
 	return func(o *optionConsumer) error {
+		decode, produceDLQ := getDecodeProduceDLQ[T](o)
+
 		o.Consumer = &consumerBatch[T]{
-			Process: fn,
-			Decode:  codecJSON[T]{}.Decode,
+			Process:    fn,
+			Decode:     decode,
+			ProduceDLQ: produceDLQ,
+			Cfg:        o.ConsumerConfig,
 		}
 
 		return nil
@@ -149,25 +167,38 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) Optio
 // WithCallback to set wkafka consumer's callback function.
 //   - Default is json.Unmarshal, use WithDecode option to add custom decode function.
 //   - If []byte then default decode function will be skipped.
-func WithCallback[T any](fn func(ctx context.Context, msg T) error) OptionConsumer {
+func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc {
 	return func(o *optionConsumer) error {
-		var decode func(raw []byte, r *kgo.Record) (T, error)
-
-		var msg T
-		switch any(msg).(type) {
-		case []byte:
-			decode = codecByte[T]{}.Decode
-		default:
-			decode = codecJSON[T]{}.Decode
-		}
+		decode, produceDLQ := getDecodeProduceDLQ[T](o)
 
 		o.Consumer = &consumerSingle[T]{
-			Process: fn,
-			Decode:  decode,
+			Process:    fn,
+			Decode:     decode,
+			ProduceDLQ: produceDLQ,
+			Cfg:        o.ConsumerConfig,
 		}
 
 		return nil
 	}
+}
+
+func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Record) (T, error), func(ctx context.Context, records []*kgo.Record) error) {
+	var decode func(raw []byte, r *kgo.Record) (T, error)
+
+	var msg T
+	switch any(msg).(type) {
+	case []byte:
+		decode = codecByte[T]{}.Decode
+	default:
+		decode = codecJSON[T]{}.Decode
+	}
+
+	var produceDLQ func(ctx context.Context, records []*kgo.Record) error
+	if o.ConsumerConfig.DLQ.Enable {
+		produceDLQ = o.Client.ProduceRaw
+	}
+
+	return decode, produceDLQ
 }
 
 // WithDecode to set wkafka consumer's decode function.
@@ -197,17 +228,6 @@ func WithPreCheck(fn func(ctx context.Context, r *kgo.Record) error) OptionConsu
 		}
 
 		o.Consumer.setPreCheck(fn)
-
-		return nil
-	}
-}
-
-// WithBatchDisableCommit to set wkafka consumer's commit messages.
-//   - Need to run manually commit messages command.
-//   - Use this option only what you know what you are doing!
-func WithDisableCommit() OptionConsumer {
-	return func(o *optionConsumer) error {
-		o.DisableCommit = true
 
 		return nil
 	}

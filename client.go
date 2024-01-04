@@ -11,8 +11,8 @@ import (
 type Client struct {
 	Kafka *kgo.Client
 
-	clientID []byte
-	consumer consumer
+	clientID       []byte
+	consumerConfig ConsumerConfig
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -95,8 +95,9 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	cl := &Client{
-		Kafka:    kgoClient,
-		clientID: []byte(o.ClientID),
+		Kafka:          kgoClient,
+		clientID:       []byte(o.ClientID),
+		consumerConfig: o.ConsumerConfig,
 	}
 
 	if err := cl.Kafka.Ping(ctx); err != nil {
@@ -114,18 +115,23 @@ func (c *Client) Close() {
 
 // Consume starts consuming messages from kafka.
 //   - Only works if client is created with consumer config.
-func (c *Client) Consume(ctx context.Context, opts ...OptionConsumer) error {
-	o := optionConsumer{}
+func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...OptionConsumer) error {
+	o := optionConsumer{
+		Client:         c,
+		ConsumerConfig: c.consumerConfig,
+	}
+
+	opts = append([]OptionConsumer{OptionConsumer(callback)}, opts...)
+
 	if err := o.apply(opts...); err != nil {
 		return err
 	}
 
-	c.consumer = o.Consumer
-	if c.consumer == nil {
+	if o.Consumer == nil {
 		return fmt.Errorf("consumer is nil: %w", ErrNotImplemented)
 	}
 
-	if err := c.consumer.Consume(ctx, c.Kafka); err != nil {
+	if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 		return fmt.Errorf("failed to consume: %w", err)
 	}
 
