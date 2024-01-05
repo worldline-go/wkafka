@@ -130,6 +130,7 @@ func Test_GroupConsuming(t *testing.T) {
 	}
 
 	type consumers struct {
+		AppName     string
 		ClientID    string
 		Config      wkafka.ConsumerConfig
 		Wait        time.Duration
@@ -145,6 +146,7 @@ func Test_GroupConsuming(t *testing.T) {
 			name: "valid group consuming",
 			consumers: []consumers{
 				{
+					AppName:  "app_1",
 					ClientID: "test-1",
 					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
@@ -152,6 +154,7 @@ func Test_GroupConsuming(t *testing.T) {
 					},
 				},
 				{
+					AppName:  "app_2",
 					ClientID: "test-2",
 					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
@@ -165,6 +168,7 @@ func Test_GroupConsuming(t *testing.T) {
 			name: "valid group consuming after",
 			consumers: []consumers{
 				{
+					AppName:  "app_1",
 					ClientID: "test-after-1",
 					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
@@ -173,6 +177,7 @@ func Test_GroupConsuming(t *testing.T) {
 					MessageWait: 2 * time.Second,
 				},
 				{
+					AppName:  "app_2",
 					ClientID: "test-after-2",
 					Config: wkafka.ConsumerConfig{
 						Topics:  []string{topic.Name},
@@ -235,6 +240,7 @@ func Test_GroupConsuming(t *testing.T) {
 					ctx,
 					tkafka.Config(),
 					wkafka.WithClientID(c.ClientID),
+					wkafka.WithAppName(c.AppName),
 					wkafka.WithConsumer(c.Config),
 				)
 				if err != nil {

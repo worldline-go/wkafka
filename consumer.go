@@ -50,8 +50,15 @@ type ConsumerConfig struct {
 }
 
 type DLQ struct {
-	// Enable is a flag to enable DLQ.
-	Enable bool `cfg:"enable"`
+	// Disable is a flag to Disable DLQ.
+	Disable bool `cfg:"enable"`
+	// StartOffset is used when there is no committed offset for GroupID.
+	//
+	// Available options:
+	//      0 : Start consuming from the earliest offset.
+	//     -1 : Start consuming from the latest offset.
+	//  0 < n : Start consuming from the offset n.
+	StartOffset int64 `cfg:"start_offset"`
 	// Skip are optional message offsets to be skipped.
 	//
 	// The format is a map of partition directyl and offsets.
@@ -61,9 +68,12 @@ type DLQ struct {
 	//      - 90
 	//    before: 20 // skip all offsets before or equal to this offset
 	Skip map[int32]Offsets `cfg:"skip"`
-	// Topic is a topic name to send messages that failed to process.
-	//  - Default is empty, no DLQ.
+	// Topic is a topic name to send messages that failed to process also could be used for DLQ.
 	Topic string `cfg:"topic"`
+	// TopicExtra is extra a list of kafka topics to just consume from DLQ.
+	TopicsExtra []string `cfg:"topics_extra"`
+	// SkipExtra are optional message offsets to be skipped for topicsExtra.
+	SkipExtra map[string]map[int32]Offsets `cfg:"skip_extra"`
 }
 
 type Offsets struct {
@@ -121,9 +131,43 @@ func skip(cfg *ConsumerConfig, r *kgo.Record) bool {
 	return false
 }
 
+func skipDLQ(cfg *ConsumerConfig, r *kgo.Record) bool {
+	dlqCfg := cfg.DLQ
+	if dlqCfg.Disable {
+		return false
+	}
+
+	if dlqCfg.SkipExtra == nil {
+		return false
+	}
+
+	if _, ok := dlqCfg.SkipExtra[r.Topic]; !ok {
+		return false
+	}
+
+	if _, ok := dlqCfg.SkipExtra[r.Topic][r.Partition]; !ok {
+		return false
+	}
+
+	offsets := dlqCfg.SkipExtra[r.Topic][r.Partition]
+
+	if offsets.Before > 0 && r.Offset <= offsets.Before {
+		return true
+	}
+
+	for _, offset := range offsets.Offsets {
+		if r.Offset == offset {
+			return true
+		}
+	}
+
+	return false
+}
+
 type optionConsumer struct {
 	Client         *Client
 	Consumer       consumer
+	ConsumerDLQ    consumer
 	ConsumerConfig ConsumerConfig
 	// Concurrent to run the consumer in concurrent mode for each partition and topic.
 	//  - Default is false.
@@ -158,6 +202,15 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Decode:     decode,
 			ProduceDLQ: produceDLQ,
 			Cfg:        o.ConsumerConfig,
+			Skip:       skip,
+		}
+
+		o.ConsumerDLQ = &consumerBatch[T]{
+			Process: fn,
+			Decode:  decode,
+			Cfg:     o.ConsumerConfig,
+			Skip:    skipDLQ,
+			IsDLQ:   true,
 		}
 
 		return nil
@@ -176,13 +229,22 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Decode:     decode,
 			ProduceDLQ: produceDLQ,
 			Cfg:        o.ConsumerConfig,
+			Skip:       skip,
+		}
+
+		o.ConsumerDLQ = &consumerSingle[T]{
+			Process: fn,
+			Decode:  decode,
+			Cfg:     o.ConsumerConfig,
+			Skip:    skipDLQ,
+			IsDLQ:   true,
 		}
 
 		return nil
 	}
 }
 
-func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Record) (T, error), func(ctx context.Context, records []*kgo.Record) error) {
+func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Record) (T, error), func(ctx context.Context, err error, records []*kgo.Record) error) {
 	var decode func(raw []byte, r *kgo.Record) (T, error)
 
 	var msg T
@@ -193,9 +255,9 @@ func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Reco
 		decode = codecJSON[T]{}.Decode
 	}
 
-	var produceDLQ func(ctx context.Context, records []*kgo.Record) error
-	if o.ConsumerConfig.DLQ.Enable {
-		produceDLQ = o.Client.ProduceRaw
+	var produceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
+	if !o.ConsumerConfig.DLQ.Disable {
+		produceDLQ = producerDLQ(o.ConsumerConfig.DLQ.Topic, o.Client.ProduceRaw)
 	}
 
 	return decode, produceDLQ

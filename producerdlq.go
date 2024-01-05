@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -9,16 +10,25 @@ import (
 )
 
 // producerDLQ to push failed records to dead letter queue.
-//   - errs must be the same length as records or 1.
-func producerDLQ(topic string, fn func(ctx context.Context, records []*kgo.Record) error) func(ctx context.Context, errs []error, records []*kgo.Record) error {
-	return func(ctx context.Context, errs []error, records []*kgo.Record) error {
-		recordsModified := make([]*kgo.Record, len(records))
-		for i, r := range recordsModified {
-			var err error
-			if len(errs) == 1 {
-				err = errs[0]
+//   - err could be ErrDLQIndexed or any other error
+func producerDLQ(topic string, fn func(ctx context.Context, records []*kgo.Record) error) func(ctx context.Context, err error, records []*kgo.Record) error {
+	return func(ctx context.Context, err error, records []*kgo.Record) error {
+		recordsModified := make([]*kgo.Record, 0, len(records))
+
+		errDLQIndexed := &DLQIndexedError{}
+		if !errors.As(err, &errDLQIndexed) {
+			errDLQIndexed.Err = err
+		}
+
+		for i, r := range records {
+			err := errDLQIndexed.Err
+			if len(errDLQIndexed.Indexes) > 0 {
+				if err := errDLQIndexed.Indexes[i]; err == nil {
+					continue
+				}
 			} else {
-				err = errs[i]
+				// ErrDLQ used, unwrap and show original error.
+				err = unwrapErr(err)
 			}
 
 			recordsModified[i] = &kgo.Record{

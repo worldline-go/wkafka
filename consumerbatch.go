@@ -15,14 +15,16 @@ type consumerBatch[T any] struct {
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck   func(ctx context.Context, r *kgo.Record) error
 	Option     optionConsumer
-	ProduceDLQ func(ctx context.Context, records []*kgo.Record) error
+	ProduceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
+	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
+	IsDLQ      bool
 }
 
 func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
 	c.PreCheck = fn
 }
 
-func (c consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
+func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 	for {
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
@@ -56,7 +58,7 @@ func (c consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // BATCH - CONCURRENT ITERATION
 /////////////////////////////////
 
-func (c consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	return nil
 }
 
@@ -64,7 +66,7 @@ func (c consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Clien
 // BATCH - ITERATION
 /////////////////////////////////
 
-func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	batchCount := c.Cfg.BatchCount
 	if v := fetch.NumRecords(); v < c.Cfg.BatchCount {
 		batchCount = v
@@ -76,6 +78,10 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		records = append(records, r)
+
+		if c.Skip(&c.Cfg, r) {
+			continue
+		}
 
 		if c.PreCheck != nil {
 			if err := c.PreCheck(ctx, r); err != nil {
@@ -106,12 +112,12 @@ func (c consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fe
 		ctxCallback := context.WithValue(ctx, KeyRecord, batchRecords)
 
 		if err := c.Process(ctxCallback, batch); err != nil {
-			if c.ProduceDLQ != nil && errors.Is(err, ErrDLQ) {
-				if err := c.ProduceDLQ(ctx, []*kgo.Record{r}); err != nil {
-					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err))
+			if c.ProduceDLQ != nil && isDQLError(err) {
+				if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
+					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err), c.IsDLQ)
 				}
 			} else {
-				return err
+				return wrapErr(r, err, c.IsDLQ)
 			}
 		}
 

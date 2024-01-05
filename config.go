@@ -27,14 +27,37 @@ type Config struct {
 type ConsumerPreConfig struct {
 	// PrefixGroupID add prefix to group_id.
 	PrefixGroupID string `cfg:"prefix_group_id"`
-
+	// FormatDLQTopic is a format string to generate DLQ topic name.
+	//  - %s is a placeholder for program name.
+	//  - Default is "finops_%s_dlq"
+	FormatDLQTopic string `cfg:"format_dlq_topic"`
+	// Validation is a configuration for validation when consumer initialized.
 	Validation Validation `cfg:"validation"`
 }
 
 // Apply configuration to ConsumerConfig and check validation.
-func (c ConsumerPreConfig) Apply(consumerConfig ConsumerConfig) (ConsumerConfig, error) {
+func (c ConsumerPreConfig) Apply(consumerConfig ConsumerConfig, progName string) (ConsumerConfig, error) {
 	if c.PrefixGroupID != "" {
 		consumerConfig.GroupID = c.PrefixGroupID + consumerConfig.GroupID
+	}
+
+	// add default topic name for DLQ
+	if !consumerConfig.DLQ.Disable {
+		if consumerConfig.DLQ.Topic == "" {
+			if c.FormatDLQTopic == "" {
+				c.FormatDLQTopic = "finops_%s_dlq"
+			}
+
+			consumerConfig.DLQ.Topic = fmt.Sprintf(c.FormatDLQTopic, progName)
+		}
+
+		if consumerConfig.DLQ.SkipExtra == nil {
+			consumerConfig.DLQ.SkipExtra = map[string]map[int32]Offsets{
+				consumerConfig.DLQ.Topic: consumerConfig.DLQ.Skip,
+			}
+		} else {
+			consumerConfig.DLQ.SkipExtra[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
+		}
 	}
 
 	if err := c.Validation.Validate(consumerConfig); err != nil {

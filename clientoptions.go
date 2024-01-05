@@ -8,13 +8,27 @@ import (
 var DefaultBatchCount = 100
 
 type options struct {
+	AppName         string
 	ConsumerEnabled bool
 	ConsumerConfig  ConsumerConfig
 	// Consumer          consumer
 	ClientID          string
-	InfoVersion       string
 	KGOOptions        []kgo.Opt
+	KGOOptionsDLQ     []kgo.Opt
 	AutoTopicCreation bool
+	DLQ               bool
+}
+
+func (o *options) apply(opts ...Option) {
+	for _, opt := range opts {
+		opt(o)
+	}
+}
+
+func (o options) WithDLQ() options {
+	o.DLQ = true
+
+	return o
 }
 
 type Option func(*options)
@@ -22,7 +36,7 @@ type Option func(*options)
 // WithClientID to set client_id in kafka server.
 // Default is using DefaultClientID variable.
 //
-// No need to set most of time.
+// No need to set most of time!
 func WithClientID(clientID string) Option {
 	return func(o *options) {
 		o.ClientID = clientID
@@ -32,9 +46,20 @@ func WithClientID(clientID string) Option {
 // WithClientInfo to set client_id in kafka server.
 // Not usable with WithClientID option.
 //   - appname:version@hostname
-func WithClientInfo(name, version string) Option {
+func WithClientInfo(appName, version string) Option {
 	return func(o *options) {
-		o.ClientID = name + ":" + version + "@" + idHostname
+		o.ClientID = appName + ":" + version + "@" + idHostname
+		o.AppName = appName
+	}
+}
+
+// WithAppName to set app name in kafka server.
+// Default is using idProgname variable.
+//
+// Use WithClientInfo instead if you want to set version and appname.
+func WithAppName(appName string) Option {
+	return func(o *options) {
+		o.AppName = appName
 	}
 }
 
@@ -50,9 +75,17 @@ func WithAutoTopicCreation(v bool) Option {
 	}
 }
 
+// WithKGOOptions to set kgo options.
 func WithKGOOptions(opts ...kgo.Opt) Option {
 	return func(o *options) {
-		o.KGOOptions = opts
+		o.KGOOptions = append(o.KGOOptions, opts...)
+	}
+}
+
+// WithKGOOptionsDLQ to set kgo options for DLQ client.
+func WithKGOOptionsDLQ(opts ...kgo.Opt) Option {
+	return func(o *options) {
+		o.KGOOptionsDLQ = append(o.KGOOptionsDLQ, opts...)
 	}
 }
 

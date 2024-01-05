@@ -14,7 +14,7 @@ type testData struct {
 	Details map[string]interface{}
 }
 
-func (d *testData) ProduceHook(r *Record) {
+func produceHook(d *testData, r *kgo.Record) error {
 	r.Value = []byte(d.Name)
 	r.Headers = append(r.Headers, Header{
 		Key:   "name",
@@ -22,6 +22,8 @@ func (d *testData) ProduceHook(r *Record) {
 	})
 	r.Key = []byte(d.Name)
 	r.Topic = d.Topic
+
+	return nil
 }
 
 func Test_produce_Produce(t *testing.T) {
@@ -52,6 +54,7 @@ func Test_produce_Produce(t *testing.T) {
 							Value: []byte("test"),
 						},
 					},
+					Hook:   produceHook,
 					Encode: codecJSON[*testData]{}.Encode,
 				},
 				ProduceRaw: func(t *testing.T) func(ctx context.Context, records []*kgo.Record) error {

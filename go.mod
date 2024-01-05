@@ -8,6 +8,7 @@ require (
 	github.com/twmb/franz-go/pkg/kadm v1.10.0
 	github.com/twmb/tlscfg v1.2.1
 	github.com/worldline-go/initializer v0.2.4
+	golang.org/x/sync v0.6.0
 )
 
 require (

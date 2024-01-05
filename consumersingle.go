@@ -15,14 +15,16 @@ type consumerSingle[T any] struct {
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck   func(ctx context.Context, r *kgo.Record) error
 	Option     optionConsumer
-	ProduceDLQ func(ctx context.Context, records []*kgo.Record) error
+	ProduceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
+	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
+	IsDLQ      bool
 }
 
 func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
 	c.PreCheck = fn
 }
 
-func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
+func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 	for {
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
@@ -56,7 +58,7 @@ func (c consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - CONCURRENT ITERATION
 /////////////////////////////////
 
-func (c consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	return nil
 }
 
@@ -64,30 +66,34 @@ func (c consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Clie
 // SINGLE - ITERATION
 ////////////////////
 
-func (c consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
-		if !skip(&c.Cfg, r) {
-			if err := c.iterationRecord(ctx, r); err != nil {
-				if c.ProduceDLQ != nil && errors.Is(err, ErrDLQ) {
-					if err := c.ProduceDLQ(ctx, []*kgo.Record{r}); err != nil {
-						return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err))
-					}
-				} else {
-					return wrapErr(r, err)
+
+		if err := c.iterationRecord(ctx, r); err != nil {
+			// send to DLQ if enabled
+			if c.ProduceDLQ != nil && isDQLError(err) {
+				if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
+					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err), c.IsDLQ)
 				}
+			} else {
+				return wrapErr(r, err, c.IsDLQ)
 			}
 		}
 
 		if err := cl.CommitRecords(ctx, r); err != nil {
-			return wrapErr(r, fmt.Errorf("commit records failed: %w", err))
+			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), c.IsDLQ)
 		}
 	}
 
 	return nil
 }
 
-func (c consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
+func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
+	if c.Skip(&c.Cfg, r) {
+		return nil
+	}
+
 	if c.PreCheck != nil {
 		if err := c.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {

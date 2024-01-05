@@ -38,6 +38,12 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 			},
 			want: ConsumerConfig{
 				GroupID: "finops_test",
+				DLQ: DLQ{
+					Topic: "finops_serviceX_dlq",
+					SkipExtra: map[string]map[int32]Offsets{
+						"finops_serviceX_dlq": nil,
+					},
+				},
 			},
 		},
 	}
@@ -47,7 +53,7 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 				PrefixGroupID: tt.fields.PrefixGroupID,
 				Validation:    tt.fields.Validation,
 			}
-			got, err := c.Apply(tt.args.consumerConfig)
+			got, err := c.Apply(tt.args.consumerConfig, "serviceX")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ConsumerPreConfig.Apply() error = %v, wantErr %v", err, tt.wantErr)
 				return

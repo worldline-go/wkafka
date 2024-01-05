@@ -37,6 +37,9 @@ lint: .golangci.yml bin/golangci-lint-$(GOLANGCI_LINT_VERSION) ## Lint Go files
 test: ## Run unit tests
 	@go test -v -race ./...
 
+test-without-cache: ## Run unit tests without cache
+	@go test -count=1 -v -race ./...
+
 coverage: ## Run unit tests with coverage
 	@go test -v -race -cover -coverpkg=./... -coverprofile=coverage.out -covermode=atomic ./...
 	@go tool cover -func=coverage.out

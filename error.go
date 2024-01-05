@@ -1,6 +1,7 @@
 package wkafka
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,10 +19,41 @@ var (
 	ErrDLQ = fmt.Errorf("send to DLQ")
 )
 
-func wrapErr(r *kgo.Record, err error) error {
-	return fmt.Errorf("message error - topic: %q, partition: %d, offset: %d, key: `%s`, headers: `%s` value: `%s`: %w",
-		r.Topic, r.Partition, r.Offset, r.Key, stringHeader(r.Headers), r.Value, err,
+// DLQIndexedError is use with callback function to send message to DLQ topic with specific index.
+type DLQIndexedError struct {
+	// Err is default error to add in header.
+	Err error
+	// Indexes if not empty, use to add error in specific index.
+	Indexes map[int]error
+}
+
+func (e *DLQIndexedError) Error() string {
+	return ErrDLQ.Error()
+}
+
+func isDQLError(err error) bool {
+	if errors.Is(err, ErrDLQ) {
+		return true
+	}
+
+	var errDLQIndexed *DLQIndexedError
+
+	return errors.As(err, &errDLQIndexed)
+}
+
+func wrapErr(r *kgo.Record, err error, dlq bool) error {
+	dlqMsg := ""
+	if dlq {
+		dlqMsg = "DLQ "
+	}
+
+	return fmt.Errorf("%smessage error - topic: %q, partition: %d, offset: %d, key: `%s`, headers: `%s` value: `%s`: %w",
+		dlqMsg, r.Topic, r.Partition, r.Offset, r.Key, stringHeader(r.Headers), r.Value, err,
 	)
+}
+
+func unwrapErr(err error) error {
+	return errors.Unwrap(err)
 }
 
 func stringHeader(headers []Header) string {

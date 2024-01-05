@@ -9,8 +9,9 @@ const (
 	KeyRecord ctxKey = "kafka_record"
 )
 
-// GetRecord returns the Record from the context in callback function.
+// GetRecord returns the *Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
+//   - This is only used in callback function.
 func GetRecord(ctx context.Context) *Record {
 	if ctx == nil {
 		return nil
@@ -21,6 +22,9 @@ func GetRecord(ctx context.Context) *Record {
 	return record
 }
 
+// GetRecordBatch returns the []*Record from the context in callback function.
+//   - If the context is nil, or the Record is not set, nil is returned.
+//   - This is only used in batch callback function.
 func GetRecordBatch(ctx context.Context) []*Record {
 	if ctx == nil {
 		return nil
