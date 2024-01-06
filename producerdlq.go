@@ -13,7 +13,7 @@ import (
 //   - err could be ErrDLQIndexed or any other error
 func producerDLQ(topic string, fn func(ctx context.Context, records []*kgo.Record) error) func(ctx context.Context, err error, records []*kgo.Record) error {
 	return func(ctx context.Context, err error, records []*kgo.Record) error {
-		recordsSend := make([]*kgo.Record, len(records))
+		recordsSend := make([]*kgo.Record, 0, len(records))
 
 		errDLQIndexed := &DLQIndexedError{}
 		if !errors.As(err, &errDLQIndexed) {
@@ -27,11 +27,11 @@ func producerDLQ(topic string, fn func(ctx context.Context, records []*kgo.Recor
 					continue
 				}
 			} else {
-				// ErrDLQ used, unwrap and show original error.
+				// ErrDLQ used, unwrap and show original error
 				err = unwrapErr(err)
 			}
 
-			recordsSend[i] = &kgo.Record{
+			recordsSend = append(recordsSend, &kgo.Record{
 				Topic: topic,
 				Key:   r.Key,
 				Value: r.Value,
@@ -43,7 +43,7 @@ func producerDLQ(topic string, fn func(ctx context.Context, records []*kgo.Recor
 					kgo.RecordHeader{Key: "topic", Value: []byte(r.Topic)},
 					kgo.RecordHeader{Key: "timestamp", Value: []byte(r.Timestamp.Format(time.RFC3339))},
 				),
-			}
+			})
 		}
 
 		return fn(ctx, recordsSend)

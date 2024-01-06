@@ -20,8 +20,9 @@ env-logs: ## Show env logs
 env-down: ## Stop env
 	docker compose -p wkafka down
 
+run-example: LOG_LEVEL ?= debug
 run-example: ## Run example
-	@go run ./example/main.go
+	LOG_LEVEL=$(LOG_LEVEL) go run ./example/main.go
 
 .golangci.yml:
 	@$(MAKE) golangci

@@ -37,7 +37,7 @@ func compressionVerify(c []string) error {
 		switch v {
 		case "gzip", "snappy", "lz4", "zstd":
 		default:
-			return fmt.Errorf("%w: %q", ErrInvalidCompression, v)
+			return fmt.Errorf("invalid compression: %q", v)
 		}
 	}
 

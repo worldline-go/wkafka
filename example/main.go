@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/worldline-go/initializer"
@@ -26,6 +27,8 @@ func getExampleList() []string {
 		exampleNames = append(exampleNames, k)
 	}
 
+	sort.Strings(exampleNames)
+
 	return exampleNames
 }
 
@@ -41,6 +44,8 @@ func main() {
 	run := examples[exampleName]
 	if run == nil {
 		slog.Error("unknown example", slog.String("example", exampleName))
+
+		return
 	}
 
 	initializer.Init(run, initializer.WithOptionsLogz(logz.WithCaller(false)))

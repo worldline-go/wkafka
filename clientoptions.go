@@ -99,3 +99,12 @@ func WithLogger(logger logz.Adapter) Option {
 		o.Logger = logger
 	}
 }
+
+// WithNoLogger to disable logger.
+func WithNoLogger(v bool) Option {
+	return func(o *options) {
+		if v {
+			o.Logger = logz.AdapterNoop{}
+		}
+	}
+}

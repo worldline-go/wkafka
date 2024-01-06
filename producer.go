@@ -8,6 +8,8 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+var defaultServiceNameKey = "service"
+
 type (
 	Header = kgo.RecordHeader
 	Record = kgo.Record
@@ -92,7 +94,7 @@ func NewProducer[T any](client *Client, topic string, opts ...OptionProducer) (*
 		Topic: topic,
 		Headers: []Header{
 			{
-				Key:   "server",
+				Key:   defaultServiceNameKey,
 				Value: client.clientID,
 			},
 		},

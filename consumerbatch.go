@@ -14,12 +14,13 @@ type consumerBatch[T any] struct {
 	Cfg     ConsumerConfig
 	Decode  func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
-	PreCheck   func(ctx context.Context, r *kgo.Record) error
-	Option     optionConsumer
-	ProduceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
-	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
-	Logger     logz.Adapter
-	IsDLQ      bool
+	PreCheck         func(ctx context.Context, r *kgo.Record) error
+	Option           optionConsumer
+	ProduceDLQ       func(ctx context.Context, err error, records []*kgo.Record) error
+	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
+	Logger           logz.Adapter
+	PartitionHandler *partitionHandler
+	IsDLQ            bool
 }
 
 func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -30,7 +31,7 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 	for {
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
-			return ErrClientClosed
+			return errClientClosed
 		}
 
 		if err := fetch.Err(); err != nil {

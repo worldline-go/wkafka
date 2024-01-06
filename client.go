@@ -12,8 +12,10 @@ import (
 )
 
 type Client struct {
-	Kafka    *kgo.Client
-	KafkaDLQ *kgo.Client
+	Kafka               *kgo.Client
+	KafkaDLQ            *kgo.Client
+	partitionHandler    *partitionHandler
+	partitionHandlerDLQ *partitionHandler
 
 	clientID       []byte
 	consumerConfig *ConsumerConfig
@@ -122,13 +124,27 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			startOffset = startOffset.At(startOffsetCfg)
 		}
 
+		// create partition handler
+		var partitionH *partitionHandler
+		if isDLQ {
+			c.partitionHandlerDLQ = &partitionHandler{
+				logger: c.logger,
+			}
+			partitionH = c.partitionHandlerDLQ
+		} else {
+			c.partitionHandler = &partitionHandler{
+				logger: c.logger,
+			}
+			partitionH = c.partitionHandler
+		}
+
 		kgoOpt = append(kgoOpt,
 			kgo.DisableAutoCommit(),
 			kgo.RequireStableFetchOffsets(),
 			kgo.ConsumerGroup(o.ConsumerConfig.GroupID),
 			kgo.ConsumeResetOffset(startOffset),
-			kgo.OnPartitionsLost(partitionLost(c)),
-			kgo.OnPartitionsRevoked(partitionRevoked(c)),
+			kgo.OnPartitionsLost(partitionLost(partitionH)),
+			kgo.OnPartitionsRevoked(partitionRevoked(partitionH)),
 		)
 
 		if isDLQ {
@@ -143,14 +159,14 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 		}
 	}
 
-	// Add custom options
+	// add custom options
 	if isDLQ {
 		kgoOpt = append(kgoOpt, o.KGOOptionsDLQ...)
 	} else {
 		kgoOpt = append(kgoOpt, o.KGOOptions...)
 	}
 
-	// Create kafka client
+	// create kafka client
 	kgoClient, err := kgo.NewClient(kgoOpt...)
 	if err != nil {
 		return nil, fmt.Errorf("create kafka client: %w", err)
@@ -168,8 +184,9 @@ func (c *Client) Close() {
 	}
 }
 
-// Consume starts consuming messages from kafka.
+// Consume starts consuming messages from kafka and blocks until context is done or an error occurs.
 //   - Only works if client is created with consumer config.
+//   - Just run one time.
 func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...OptionConsumer) error {
 	o := optionConsumer{
 		Client:         c,
@@ -183,7 +200,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	}
 
 	if o.Consumer == nil {
-		return fmt.Errorf("consumer is nil: %w", ErrNotImplemented)
+		return fmt.Errorf("consumer is nil: %w", errNotImplemented)
 	}
 
 	if o.ConsumerDLQ == nil {

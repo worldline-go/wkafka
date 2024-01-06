@@ -200,21 +200,23 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 		decode, produceDLQ := getDecodeProduceDLQ[T](o)
 
 		o.Consumer = &consumerBatch[T]{
-			Process:    fn,
-			Decode:     decode,
-			ProduceDLQ: produceDLQ,
-			Cfg:        o.ConsumerConfig,
-			Skip:       skip,
-			Logger:     o.Client.logger,
+			Process:          fn,
+			Decode:           decode,
+			ProduceDLQ:       produceDLQ,
+			Cfg:              o.ConsumerConfig,
+			Skip:             skip,
+			Logger:           o.Client.logger,
+			PartitionHandler: o.Client.partitionHandler,
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
-			Process: fn,
-			Decode:  decode,
-			Cfg:     o.ConsumerConfig,
-			Skip:    skipDLQ,
-			IsDLQ:   true,
-			Logger:  o.Client.logger,
+			Process:          fn,
+			Decode:           decode,
+			Cfg:              o.ConsumerConfig,
+			Skip:             skipDLQ,
+			IsDLQ:            true,
+			Logger:           o.Client.logger,
+			PartitionHandler: o.Client.partitionHandlerDLQ,
 		}
 
 		return nil
@@ -229,21 +231,23 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 		decode, produceDLQ := getDecodeProduceDLQ[T](o)
 
 		o.Consumer = &consumerSingle[T]{
-			Process:    fn,
-			Decode:     decode,
-			ProduceDLQ: produceDLQ,
-			Cfg:        o.ConsumerConfig,
-			Skip:       skip,
-			Logger:     o.Client.logger,
+			Process:          fn,
+			Decode:           decode,
+			ProduceDLQ:       produceDLQ,
+			Cfg:              o.ConsumerConfig,
+			Skip:             skip,
+			Logger:           o.Client.logger,
+			PartitionHandler: o.Client.partitionHandler,
 		}
 
 		o.ConsumerDLQ = &consumerSingle[T]{
-			Process: fn,
-			Decode:  decode,
-			Cfg:     o.ConsumerConfig,
-			Skip:    skipDLQ,
-			IsDLQ:   true,
-			Logger:  o.Client.logger,
+			Process:          fn,
+			Decode:           decode,
+			Cfg:              o.ConsumerConfig,
+			Skip:             skipDLQ,
+			IsDLQ:            true,
+			Logger:           o.Client.logger,
+			PartitionHandler: o.Client.partitionHandlerDLQ,
 		}
 
 		return nil
