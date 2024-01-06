@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/worldline-go/logz"
 )
 
 type consumerSingle[T any] struct {
@@ -17,6 +18,7 @@ type consumerSingle[T any] struct {
 	Option     optionConsumer
 	ProduceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
 	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
+	Logger     logz.Adapter
 	IsDLQ      bool
 }
 
@@ -40,26 +42,10 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		if !c.Option.Concurrent {
-			if err := c.iteration(ctx, cl, fetch); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		if err := c.concurrentIteration(ctx, cl, fetch); err != nil {
+		if err := c.iteration(ctx, cl, fetch); err != nil {
 			return err
 		}
 	}
-}
-
-/////////////////////////////////
-// SINGLE - CONCURRENT ITERATION
-/////////////////////////////////
-
-func (c *consumerSingle[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
-	return nil
 }
 
 ////////////////////
@@ -70,13 +56,14 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 
-		if err := c.iterationRecord(ctx, r); err != nil {
-			// send to DLQ if enabled
-			if c.ProduceDLQ != nil && isDQLError(err) {
-				if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
-					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err), c.IsDLQ)
-				}
-			} else {
+		// listening DLQ topics
+		if c.IsDLQ {
+			if err := c.iterationDLQ(ctx, r); err != nil {
+				return wrapErr(r, err, c.IsDLQ)
+			}
+		} else {
+			// listening main topics
+			if err := c.iterationMain(ctx, r); err != nil {
 				return wrapErr(r, err, c.IsDLQ)
 			}
 		}
@@ -84,6 +71,60 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 		if err := cl.CommitRecords(ctx, r); err != nil {
 			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), c.IsDLQ)
 		}
+	}
+
+	return nil
+}
+
+// iterationDLQ is used to listen DLQ topics, error usually comes from context cancellation.
+func (c *consumerSingle[T]) iterationDLQ(ctx context.Context, r *kgo.Record) error {
+	wait := waitRetry{
+		Interval: c.Cfg.DLQ.RetryInterval,
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := c.iterationRecord(ctx, r); err != nil {
+			errOrg, _ := isDQLError(err)
+			errWrapped := wrapErr(r, errOrg, c.IsDLQ)
+			c.Logger.Error("process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
+
+			if err := wait.Sleep(ctx); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		break
+	}
+
+	return nil
+}
+
+// iterationMain is used to listen main topics.
+func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) error {
+	if err := c.iterationRecord(ctx, r); err != nil {
+		errOrg, ok := isDQLError(err)
+		if !ok {
+			return err
+		}
+
+		// send to DLQ if enabled
+		if c.ProduceDLQ != nil {
+			if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
+				return fmt.Errorf("produce to DLQ failed: %w", err)
+			}
+
+			return nil
+		}
+
+		return errOrg
 	}
 
 	return nil

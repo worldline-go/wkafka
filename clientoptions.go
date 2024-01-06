@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/worldline-go/logz"
 )
 
 // DefaultBatchCount is default batch count for batch consumer, if not set.
@@ -10,25 +11,19 @@ var DefaultBatchCount = 100
 type options struct {
 	AppName         string
 	ConsumerEnabled bool
-	ConsumerConfig  ConsumerConfig
+	ConsumerConfig  *ConsumerConfig
 	// Consumer          consumer
 	ClientID          string
 	KGOOptions        []kgo.Opt
 	KGOOptionsDLQ     []kgo.Opt
 	AutoTopicCreation bool
-	DLQ               bool
+	Logger            logz.Adapter
 }
 
 func (o *options) apply(opts ...Option) {
 	for _, opt := range opts {
 		opt(o)
 	}
-}
-
-func (o options) WithDLQ() options {
-	o.DLQ = true
-
-	return o
 }
 
 type Option func(*options)
@@ -91,7 +86,16 @@ func WithKGOOptionsDLQ(opts ...kgo.Opt) Option {
 
 func WithConsumer(cfg ConsumerConfig) Option {
 	return func(o *options) {
-		o.ConsumerConfig = cfg
+		o.ConsumerConfig = &cfg
 		o.ConsumerEnabled = true
+	}
+}
+
+// WithLogger configures the client to use the provided logger.
+//   - For zerolog logz.AdapterKV{Log: logger} can usable.
+//   - Default is using zerolog's global logger.
+func WithLogger(logger logz.Adapter) Option {
+	return func(o *options) {
+		o.Logger = logger
 	}
 }

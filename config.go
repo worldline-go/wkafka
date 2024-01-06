@@ -3,7 +3,12 @@ package wkafka
 import (
 	"fmt"
 	"regexp"
+	"time"
+
+	"github.com/worldline-go/logz"
 )
+
+var DefaultRetryInterval = 10 * time.Second
 
 type Config struct {
 	// Brokers is a list of kafka brokers to connect to.
@@ -28,27 +33,39 @@ type ConsumerPreConfig struct {
 	// PrefixGroupID add prefix to group_id.
 	PrefixGroupID string `cfg:"prefix_group_id"`
 	// FormatDLQTopic is a format string to generate DLQ topic name.
-	//  - %s is a placeholder for program name.
-	//  - Default is "finops_%s_dlq"
+	//  - Example is "finops_{{.AppName}}_dlq"
+	//  - It should be exist if DLQ is enabled and topic is not set.
+	//
+	//  - Available variables:
+	//    - AppName
 	FormatDLQTopic string `cfg:"format_dlq_topic"`
 	// Validation is a configuration for validation when consumer initialized.
 	Validation Validation `cfg:"validation"`
 }
 
-// Apply configuration to ConsumerConfig and check validation.
-func (c ConsumerPreConfig) Apply(consumerConfig ConsumerConfig, progName string) (ConsumerConfig, error) {
+// configApply configuration to ConsumerConfig and check validation.
+func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName string, logger logz.Adapter) error {
 	if c.PrefixGroupID != "" {
 		consumerConfig.GroupID = c.PrefixGroupID + consumerConfig.GroupID
+	}
+
+	if !consumerConfig.DLQ.Disable && consumerConfig.DLQ.Topic == "" && c.FormatDLQTopic == "" {
+		consumerConfig.DLQ.Disable = true
+		logger.Warn("dlq is disabled because topic and format_dlq_topic is not set")
 	}
 
 	// add default topic name for DLQ
 	if !consumerConfig.DLQ.Disable {
 		if consumerConfig.DLQ.Topic == "" {
 			if c.FormatDLQTopic == "" {
-				c.FormatDLQTopic = "finops_%s_dlq"
+				return fmt.Errorf("format_dlq_topic is required if dlq topic is not set")
 			}
 
-			consumerConfig.DLQ.Topic = fmt.Sprintf(c.FormatDLQTopic, progName)
+			var err error
+			consumerConfig.DLQ.Topic, err = templateRun(c.FormatDLQTopic, map[string]string{"AppName": progName})
+			if err != nil {
+				return fmt.Errorf("format_dlq_topic: %w", err)
+			}
 		}
 
 		if consumerConfig.DLQ.SkipExtra == nil {
@@ -58,13 +75,17 @@ func (c ConsumerPreConfig) Apply(consumerConfig ConsumerConfig, progName string)
 		} else {
 			consumerConfig.DLQ.SkipExtra[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
 		}
+
+		if consumerConfig.DLQ.RetryInterval == 0 {
+			consumerConfig.DLQ.RetryInterval = DefaultRetryInterval
+		}
 	}
 
 	if err := c.Validation.Validate(consumerConfig); err != nil {
-		return consumerConfig, fmt.Errorf("validate consumer config: %w", err)
+		return fmt.Errorf("validate consumer config: %w", err)
 	}
 
-	return consumerConfig, nil
+	return nil
 }
 
 // Validation is a configuration for validation when consumer initialized.
@@ -108,7 +129,7 @@ func (v GroupIDValidation) Validate(groupID string) error {
 	return nil
 }
 
-func (v Validation) Validate(consumerConfig ConsumerConfig) error {
+func (v Validation) Validate(consumerConfig *ConsumerConfig) error {
 	if err := v.GroupID.Validate(consumerConfig.GroupID); err != nil {
 		return err
 	}

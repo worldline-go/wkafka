@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/worldline-go/logz"
 )
 
 type consumerBatch[T any] struct {
@@ -17,6 +18,7 @@ type consumerBatch[T any] struct {
 	Option     optionConsumer
 	ProduceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
 	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
+	Logger     logz.Adapter
 	IsDLQ      bool
 }
 
@@ -40,26 +42,10 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		if !c.Option.Concurrent {
-			if err := c.batchIteration(ctx, cl, fetch); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		if err := c.concurrentIteration(ctx, cl, fetch); err != nil {
+		if err := c.batchIteration(ctx, cl, fetch); err != nil {
 			return err
 		}
 	}
-}
-
-/////////////////////////////////
-// BATCH - CONCURRENT ITERATION
-/////////////////////////////////
-
-func (c *consumerBatch[T]) concurrentIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
-	return nil
 }
 
 /////////////////////////////////
@@ -112,13 +98,13 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 		ctxCallback := context.WithValue(ctx, KeyRecord, batchRecords)
 
 		if err := c.Process(ctxCallback, batch); err != nil {
-			if c.ProduceDLQ != nil && isDQLError(err) {
-				if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
-					return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err), c.IsDLQ)
-				}
-			} else {
-				return wrapErr(r, err, c.IsDLQ)
-			}
+			// if c.ProduceDLQ != nil && isDQLError(err) {
+			// 	if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
+			// 		return wrapErr(r, fmt.Errorf("produce to DLQ failed: %w", err), c.IsDLQ)
+			// 	}
+			// } else {
+			// 	return wrapErr(r, err, c.IsDLQ)
+			// }
 		}
 
 		if err := cl.CommitRecords(ctx, records...); err != nil {

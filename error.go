@@ -28,17 +28,23 @@ type DLQIndexedError struct {
 }
 
 func (e *DLQIndexedError) Error() string {
-	return ErrDLQ.Error()
+	return "DLQ indexed error"
 }
 
-func isDQLError(err error) bool {
+// isDQLError check if error is DLQ error and return the original error or error.
+func isDQLError(err error) (error, bool) {
 	if errors.Is(err, ErrDLQ) {
-		return true
+		return unwrapErr(err), true
 	}
 
 	var errDLQIndexed *DLQIndexedError
 
-	return errors.As(err, &errDLQIndexed)
+	ok := errors.As(err, &errDLQIndexed)
+	if ok {
+		return errDLQIndexed.Err, true
+	}
+
+	return err, false
 }
 
 func wrapErr(r *kgo.Record, err error, dlq bool) error {

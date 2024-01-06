@@ -1,10 +1,9 @@
-package main
+package producer
 
 import (
 	"context"
 	"sync"
 
-	"github.com/worldline-go/initializer"
 	"github.com/worldline-go/wkafka"
 )
 
@@ -32,11 +31,7 @@ func ProduceHook(d *Data, r *wkafka.Record) error {
 	return nil
 }
 
-func main() {
-	initializer.Init(run)
-}
-
-func run(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleHook(ctx context.Context, _ *sync.WaitGroup) error {
 	client, err := wkafka.New(ctx, kafkaConfig)
 	if err != nil {
 		return err

@@ -2,7 +2,7 @@ package wkafka
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -50,8 +50,14 @@ type ConsumerConfig struct {
 }
 
 type DLQ struct {
-	// Disable is a flag to Disable DLQ.
-	Disable bool `cfg:"enable"`
+	// Disable is a flag to disable DLQ.
+	//  - Default is false.
+	//  - If topic is not set, it will be generated from format_dlq_topic.
+	//  - If topic and format_dlq_topic is not set, dlq will be disabled!
+	Disable bool `cfg:"disable"`
+	// RetryInterval is a time interval to retry again of DLQ messages.
+	// - Default is 10 seconds.
+	RetryInterval time.Duration `cfg:"retry_interval"`
 	// StartOffset is used when there is no committed offset for GroupID.
 	//
 	// Available options:
@@ -104,7 +110,7 @@ type consumer interface {
 }
 
 func skip(cfg *ConsumerConfig, r *kgo.Record) bool {
-	if cfg.Skip == nil {
+	if len(cfg.Skip) == 0 {
 		return false
 	}
 
@@ -169,10 +175,6 @@ type optionConsumer struct {
 	Consumer       consumer
 	ConsumerDLQ    consumer
 	ConsumerConfig ConsumerConfig
-	// Concurrent to run the consumer in concurrent mode for each partition and topic.
-	//  - Default is false.
-	//  - Each topic could have different type of value so use with processor map.
-	Concurrent bool `cfg:"concurrent"`
 }
 
 type (
@@ -203,6 +205,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			ProduceDLQ: produceDLQ,
 			Cfg:        o.ConsumerConfig,
 			Skip:       skip,
+			Logger:     o.Client.logger,
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
@@ -211,6 +214,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Cfg:     o.ConsumerConfig,
 			Skip:    skipDLQ,
 			IsDLQ:   true,
+			Logger:  o.Client.logger,
 		}
 
 		return nil
@@ -230,6 +234,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			ProduceDLQ: produceDLQ,
 			Cfg:        o.ConsumerConfig,
 			Skip:       skip,
+			Logger:     o.Client.logger,
 		}
 
 		o.ConsumerDLQ = &consumerSingle[T]{
@@ -238,6 +243,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Cfg:     o.ConsumerConfig,
 			Skip:    skipDLQ,
 			IsDLQ:   true,
+			Logger:  o.Client.logger,
 		}
 
 		return nil
@@ -268,10 +274,6 @@ func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Reco
 //   - Use this option after the WithCallback option.
 func WithDecode[T any](fn func(raw []byte, r *kgo.Record) (T, error)) OptionConsumer {
 	return func(o *optionConsumer) error {
-		if o.Consumer == nil {
-			return fmt.Errorf("consumer is nil, use WithCallback[Batch] option first")
-		}
-
 		switch v := o.Consumer.(type) {
 		case *consumerBatch[T]:
 			v.Decode = fn
@@ -283,23 +285,12 @@ func WithDecode[T any](fn func(raw []byte, r *kgo.Record) (T, error)) OptionCons
 	}
 }
 
+// WithPreCheck to set wkafka consumer's pre check function.
+//   - Return ErrSkip will skip the message.
 func WithPreCheck(fn func(ctx context.Context, r *kgo.Record) error) OptionConsumer {
 	return func(o *optionConsumer) error {
-		if o.Consumer == nil {
-			return fmt.Errorf("consumer is nil, use WithCallback[Batch] option first")
-		}
-
 		o.Consumer.setPreCheck(fn)
 
 		return nil
 	}
 }
-
-// TODO implement concurrent mode
-// func WithConcurrent() OptionConsumer {
-// 	return func(o *optionConsumer) error {
-// 		o.Concurrent = true
-
-// 		return nil
-// 	}
-// }

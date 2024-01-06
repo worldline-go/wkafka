@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/worldline-go/logz"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -14,7 +16,8 @@ type Client struct {
 	KafkaDLQ *kgo.Client
 
 	clientID       []byte
-	consumerConfig ConsumerConfig
+	consumerConfig *ConsumerConfig
+	logger         logz.Adapter
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -22,47 +25,49 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		ClientID:          DefaultClientID,
 		AutoTopicCreation: true,
 		AppName:           idProgname,
+		Logger:            logz.AdapterKV{Log: log.Logger},
 	}
 
 	o.apply(opts...)
 
 	// validate client and add defaults to consumer config
-	consumerConfig, err := cfg.Consumer.Apply(o.ConsumerConfig, o.AppName)
-	if err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+	if o.ConsumerConfig != nil {
+		if err := configApply(cfg.Consumer, o.ConsumerConfig, o.AppName, o.Logger); err != nil {
+			return nil, fmt.Errorf("validate config: %w", err)
+		}
 	}
 
-	o.ConsumerConfig = consumerConfig
+	c := &Client{
+		consumerConfig: o.ConsumerConfig,
+		logger:         o.Logger,
+		clientID:       []byte(o.ClientID),
+	}
 
-	kgoClient, err := newClient(ctx, cfg, o)
+	kgoClient, err := newClient(c, cfg, &o, false)
 	if err != nil {
 		return nil, err
 	}
 
 	var kgoClientDLQ *kgo.Client
 	if o.ConsumerEnabled {
-		kgoClientDLQ, err = newClient(ctx, cfg, o.WithDLQ())
+		kgoClientDLQ, err = newClient(c, cfg, &o, true)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	cl := &Client{
-		Kafka:          kgoClient,
-		KafkaDLQ:       kgoClientDLQ,
-		clientID:       []byte(o.ClientID),
-		consumerConfig: o.ConsumerConfig,
-	}
+	c.Kafka = kgoClient
+	c.KafkaDLQ = kgoClientDLQ
 
 	// main and dlq use same config, ask for validation once
-	if err := cl.Kafka.Ping(ctx); err != nil {
+	if err := c.Kafka.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("connection to kafka brokers: %w", err)
 	}
 
-	return cl, nil
+	return c, nil
 }
 
-func newClient(ctx context.Context, cfg Config, o options) (*kgo.Client, error) {
+func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, error) {
 	compressions, err := compressionOpts(cfg.Compressions)
 	if err != nil {
 		return nil, err
@@ -99,13 +104,8 @@ func newClient(ctx context.Context, cfg Config, o options) (*kgo.Client, error) 
 	}
 
 	if o.ConsumerEnabled {
-		// validate consumer
-		if err := cfg.Consumer.Validation.Validate(o.ConsumerConfig); err != nil {
-			return nil, fmt.Errorf("validate consumer config: %w", err)
-		}
-
 		var startOffsetCfg int64
-		if o.DLQ {
+		if isDLQ {
 			startOffsetCfg = o.ConsumerConfig.DLQ.StartOffset
 		} else {
 			startOffsetCfg = o.ConsumerConfig.StartOffset
@@ -127,17 +127,24 @@ func newClient(ctx context.Context, cfg Config, o options) (*kgo.Client, error) 
 			kgo.RequireStableFetchOffsets(),
 			kgo.ConsumerGroup(o.ConsumerConfig.GroupID),
 			kgo.ConsumeResetOffset(startOffset),
+			kgo.OnPartitionsLost(partitionLost(c)),
+			kgo.OnPartitionsRevoked(partitionRevoked(c)),
 		)
 
-		if o.DLQ {
-			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.DLQ.Topic))
+		if isDLQ {
+			topics := []string{o.ConsumerConfig.DLQ.Topic}
+			if len(o.ConsumerConfig.DLQ.TopicsExtra) > 0 {
+				topics = append(topics, o.ConsumerConfig.DLQ.TopicsExtra...)
+			}
+
+			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(topics...))
 		} else {
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.Topics...))
 		}
 	}
 
 	// Add custom options
-	if o.DLQ {
+	if isDLQ {
 		kgoOpt = append(kgoOpt, o.KGOOptionsDLQ...)
 	} else {
 		kgoOpt = append(kgoOpt, o.KGOOptions...)
@@ -156,6 +163,9 @@ func (c *Client) Close() {
 	if c.Kafka != nil {
 		c.Kafka.Close()
 	}
+	if c.KafkaDLQ != nil {
+		c.KafkaDLQ.Close()
+	}
 }
 
 // Consume starts consuming messages from kafka.
@@ -163,7 +173,7 @@ func (c *Client) Close() {
 func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...OptionConsumer) error {
 	o := optionConsumer{
 		Client:         c,
-		ConsumerConfig: c.consumerConfig,
+		ConsumerConfig: *c.consumerConfig,
 	}
 
 	opts = append([]OptionConsumer{OptionConsumer(callback)}, opts...)
