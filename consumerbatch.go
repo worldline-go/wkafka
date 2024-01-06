@@ -10,9 +10,12 @@ import (
 )
 
 type consumerBatch[T any] struct {
+	// Process is nil for DLQ consumer.
 	Process func(ctx context.Context, msg []T) error
-	Cfg     ConsumerConfig
-	Decode  func(raw []byte, r *kgo.Record) (T, error)
+	// ProcessDLQ is nil for main consumer.
+	ProcessDLQ func(ctx context.Context, msg T) error
+	Cfg        ConsumerConfig
+	Decode     func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
 	Option           optionConsumer

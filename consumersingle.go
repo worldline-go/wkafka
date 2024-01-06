@@ -10,9 +10,12 @@ import (
 )
 
 type consumerSingle[T any] struct {
+	// Process is nil for DLQ consumer.
 	Process func(ctx context.Context, msg T) error
-	Cfg     ConsumerConfig
-	Decode  func(raw []byte, r *kgo.Record) (T, error)
+	// ProcessDLQ is nil for main consumer.
+	ProcessDLQ func(ctx context.Context, msg T) error
+	Cfg        ConsumerConfig
+	Decode     func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
 	Option           optionConsumer
@@ -79,9 +82,16 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			}
 		} else {
 			// listening main topics
-			// checking revoked partition already on above no need to check again
 			if err := c.iterationMain(ctx, r); err != nil {
 				return wrapErr(r, err, c.IsDLQ)
+			}
+
+			// maybe working on that record is too long and partition is revoked
+			// not commit it, mess up the commit offest
+			// callback function need to be awere of getting same message again and just need skip it without error
+			// also error is ok due to it will be push in DLQ
+			if c.PartitionHandler.IsRevokedRecord(r) {
+				continue
 			}
 		}
 
@@ -178,8 +188,15 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	}
 
 	ctxCallback := context.WithValue(ctx, KeyRecord, r)
-	if err := c.Process(ctxCallback, data); err != nil {
-		return err
+	if c.IsDLQ {
+		ctxCallback = context.WithValue(ctxCallback, KeyIsDLQ, true)
+		if err := c.ProcessDLQ(ctxCallback, data); err != nil {
+			return err
+		}
+	} else {
+		if err := c.Process(ctxCallback, data); err != nil {
+			return err
+		}
 	}
 
 	return nil

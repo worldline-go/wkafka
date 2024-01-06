@@ -7,12 +7,25 @@ type ctxKey string
 const (
 	// KeyRecord is the context key for *Record.
 	KeyRecord ctxKey = "kafka_record"
+	// KeyIsDLQ is the context key for is DLQ.
+	KeyIsDLQ ctxKey = "kafka_is_dlq"
 )
 
-// GetRecord returns the *Record from the context in callback function.
+// CtxIsDLQ usable in the callback function to understand processing a DLQ message.
+func CtxIsDLQ(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+
+	isDLQ, _ := ctx.Value(KeyIsDLQ).(bool)
+
+	return isDLQ
+}
+
+// CtxRecord returns the *Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
 //   - This is only used in callback function.
-func GetRecord(ctx context.Context) *Record {
+func CtxRecord(ctx context.Context) *Record {
 	if ctx == nil {
 		return nil
 	}
@@ -22,10 +35,10 @@ func GetRecord(ctx context.Context) *Record {
 	return record
 }
 
-// GetRecordBatch returns the []*Record from the context in callback function.
+// CtxRecordBatch returns the []*Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
 //   - This is only used in batch callback function.
-func GetRecordBatch(ctx context.Context) []*Record {
+func CtxRecordBatch(ctx context.Context) []*Record {
 	if ctx == nil {
 		return nil
 	}

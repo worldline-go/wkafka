@@ -41,9 +41,9 @@ type ConsumerConfig struct {
 	//  - Fetching messages from broker, this is not related with batch processing!
 	MaxPollRecords int `cfg:"max_poll_records"`
 	// BatchCount is a number of messages processed in a single batch.
-	//  - <= 1 is 1 message per batch.
 	//  - Processing count could be less than BatchCount if the batch is not full.
 	//  - Usable with WithConsumerBatch
+	//  - Default is 100.
 	BatchCount int `cfg:"batch_count"`
 	// DLQ is a dead letter queue configuration.
 	DLQ DLQ `cfg:"dlq"`
@@ -143,7 +143,7 @@ func skipDLQ(cfg *ConsumerConfig, r *kgo.Record) bool {
 		return false
 	}
 
-	if dlqCfg.SkipExtra == nil {
+	if len(dlqCfg.SkipExtra) == 0 {
 		return false
 	}
 
@@ -192,6 +192,13 @@ func (o *optionConsumer) apply(opts ...OptionConsumer) error {
 	return nil
 }
 
+// dlqProcessBatch to get one message and convert to batch message after that process.
+func dlqProcessBatch[T any](fn func(ctx context.Context, msg []T) error) func(ctx context.Context, msg T) error {
+	return func(ctx context.Context, msg T) error {
+		return fn(ctx, []T{msg})
+	}
+}
+
 // WithCallbackBatch to set wkafka consumer's callback function.
 //   - Default is json.Unmarshal, use WithDecode option to add custom decode function.
 //   - If [][]byte then default decode function will be skipped.
@@ -210,7 +217,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
-			Process:          fn,
+			ProcessDLQ:       dlqProcessBatch(fn),
 			Decode:           decode,
 			Cfg:              o.ConsumerConfig,
 			Skip:             skipDLQ,
@@ -241,7 +248,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 		}
 
 		o.ConsumerDLQ = &consumerSingle[T]{
-			Process:          fn,
+			ProcessDLQ:       fn,
 			Decode:           decode,
 			Cfg:              o.ConsumerConfig,
 			Skip:             skipDLQ,
@@ -294,6 +301,21 @@ func WithDecode[T any](fn func(raw []byte, r *kgo.Record) (T, error)) OptionCons
 func WithPreCheck(fn func(ctx context.Context, r *kgo.Record) error) OptionConsumer {
 	return func(o *optionConsumer) error {
 		o.Consumer.setPreCheck(fn)
+
+		return nil
+	}
+}
+
+// WithCallbackDLQ to set wkafka consumer's callback function for DLQ.
+//   - Use this option if you want to process DLQ messages in different function.
+func WithCallbackDLQ[T any](fn func(ctx context.Context, msg T) error) OptionConsumer {
+	return func(o *optionConsumer) error {
+		switch v := o.ConsumerDLQ.(type) {
+		case *consumerBatch[T]:
+			v.ProcessDLQ = fn
+		case *consumerSingle[T]:
+			v.ProcessDLQ = fn
+		}
 
 		return nil
 	}

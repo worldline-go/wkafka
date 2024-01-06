@@ -39,7 +39,7 @@ func (p Processor) SetClientID(id string) Processor {
 }
 
 func (p Processor) Process(ctx context.Context, msg Data) error {
-	record := wkafka.GetRecord(ctx)
+	record := wkafka.CtxRecord(ctx)
 	slog.Info("callback", slog.String("client_id", p.ClientID), slog.Any("test", msg.Test), slog.String("topic", record.Topic), slog.String("key", string(record.Key)))
 
 	if p.Wait > 0 {
@@ -79,7 +79,7 @@ func (c *Counter[T]) Count(ctx context.Context, msg T) error {
 		c.Map = make(map[T]int64)
 	}
 
-	v, _ := c.Map[msg]
+	v := c.Map[msg]
 	c.Map[msg] = v + 1
 
 	if c.IsFinish != nil && c.IsFinish(c.Map) {

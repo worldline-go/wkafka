@@ -29,7 +29,7 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 				Validation: Validation{
 					GroupID: GroupIDValidation{
 						Enabled:    true,
-						RgxGroupID: `finops_.*`,
+						RgxGroupID: `^finops_.*$`,
 					},
 				},
 			},
@@ -45,6 +45,7 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 					SkipExtra: map[string]map[int32]Offsets{
 						"finops_serviceX_dlq": nil,
 					},
+					RetryInterval: DefaultRetryInterval,
 				},
 			},
 		},
@@ -56,12 +57,12 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 				Validation:     tt.fields.Validation,
 				FormatDLQTopic: "finops_{{.AppName}}_dlq",
 			}
-			got := tt.args.consumerConfig
 			err := configApply(c, &tt.args.consumerConfig, "serviceX", logz.AdapterNoop{})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ConsumerPreConfig.Apply() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			got := tt.args.consumerConfig
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("ConsumerPreConfig.Apply() = %v, want %v", got, tt.want)
 			}

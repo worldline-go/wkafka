@@ -98,8 +98,6 @@ type GroupIDValidation struct {
 	Enabled bool `cfg:"enabled"`
 	// RgxGroupID is a regex pattern to validate RgxGroupID.
 	RgxGroupID string `cfg:"rgx_group_id"`
-	// DisableWord boundary check.
-	DisableWordBoundary bool `cfg:"disable_word_boundary"`
 }
 
 func (v GroupIDValidation) Validate(groupID string) error {
@@ -112,10 +110,6 @@ func (v GroupIDValidation) Validate(groupID string) error {
 	}
 
 	if v.RgxGroupID != "" {
-		if !v.DisableWordBoundary {
-			v.RgxGroupID = fmt.Sprintf(`\b%s\b`, v.RgxGroupID)
-		}
-
 		rgx, err := regexp.Compile(v.RgxGroupID)
 		if err != nil {
 			return fmt.Errorf("group_id validation regex: %w", err)
