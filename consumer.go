@@ -217,8 +217,8 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
-			ProcessDLQ:       dlqProcessBatch(fn),
 			Decode:           decode,
+			ProcessDLQ:       dlqProcessBatch(fn),
 			Cfg:              o.ConsumerConfig,
 			Skip:             skipDLQ,
 			IsDLQ:            true,

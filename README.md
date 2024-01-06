@@ -142,7 +142,7 @@ return producer.Produce(ctx, data)
 Initialize kafka and redpanda console with docker-compose.
 
 ```sh
-# using "docker compose" command, if you use podman then add compose extension and link docker as podman
+# using "docker compose" command, if you use podman then add compose extension and link docker with podman binary
 make env
 ```
 

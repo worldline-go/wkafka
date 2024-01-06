@@ -58,6 +58,32 @@ func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
 	return false
 }
 
+// IsRevokedRecordBatch is used to check if the record is revoked.
+//   - If the record is revoked, it will be skipped and returns just valid records.
+func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, bool) {
+	if len(h.mapPartitionsRevoked) == 0 {
+		return records, false
+	}
+
+	validRecords := make([]*Record, 0, len(records))
+	for _, r := range records {
+		if _, ok := h.mapPartitionsRevoked[r.Topic]; !ok {
+			validRecords = append(validRecords, r)
+			continue
+		}
+
+		for _, partition := range h.mapPartitionsRevoked[r.Topic] {
+			if partition == r.Partition {
+				continue
+			}
+
+			validRecords = append(validRecords, r)
+		}
+	}
+
+	return validRecords, len(validRecords) != len(records)
+}
+
 func partitionLost(h *partitionHandler) func(context.Context, *kgo.Client, map[string][]int32) {
 	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {

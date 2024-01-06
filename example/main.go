@@ -16,6 +16,8 @@ import (
 
 var examples = map[string]func(context.Context, *sync.WaitGroup) error{
 	"admin_topic":     admin.RunExampleTopic,
+	"admin_partition": admin.RunExamplePartition,
+	"admin_list":      admin.RunExampleList,
 	"consumer_batch":  consumer.RunExampleBatch,
 	"consumer_single": consumer.RunExampleSingle,
 	"producer_hook":   producer.RunExampleHook,

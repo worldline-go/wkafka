@@ -2,67 +2,65 @@ package consumer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
 
-	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/wkafka"
 )
 
 var (
 	kafkaConfigBatch = wkafka.Config{
 		Brokers: []string{"localhost:9092"},
+		Consumer: wkafka.ConsumerPreConfig{
+			FormatDLQTopic: "finops_{{.AppName}}_dlq",
+		},
 	}
 	consumeConfigBatch = wkafka.ConsumerConfig{
 		Topics:     []string{"test"},
 		GroupID:    "test_batch",
-		BatchCount: 5,
+		BatchCount: 10,
 	}
 )
 
 type DataBatch struct {
-	Test int `json:"test"`
-
-	MetadataBatch `json:"-"`
-}
-
-type MetadataBatch struct {
-	Topic string
-	Key   []byte
+	Test       int  `json:"test"`
+	IsErr      bool `json:"is_err"`
+	IsErrFatal bool `json:"is_err_fatal"`
 }
 
 func ProcessBatch(_ context.Context, msg []DataBatch) error {
 	slog.Info("batch process", slog.Int("count", len(msg)))
+	var anyError bool
+	var anyErrorFatal bool
 	for _, m := range msg {
-		slog.Info("callback", slog.Any("test", m.Test), slog.String("topic", m.MetadataBatch.Topic), slog.String("key", string(m.MetadataBatch.Key)))
+		if !anyError && m.IsErr {
+			anyError = true
+		}
+
+		if !anyErrorFatal && m.IsErrFatal {
+			anyErrorFatal = true
+		}
+
+		slog.Info("callback", slog.Any("test", m.Test), slog.Bool("is_err", m.IsErr), slog.Bool("is_err_fatal", m.IsErrFatal))
+	}
+
+	if anyErrorFatal {
+		return fmt.Errorf("test fatal error")
+	}
+
+	if anyError {
+		return fmt.Errorf("test error: %w", wkafka.ErrDLQ)
 	}
 
 	return nil
-}
-
-func Decode(data []byte, r *kgo.Record) (DataBatch, error) {
-	if !json.Valid(data) {
-		return DataBatch{}, wkafka.ErrSkip
-	}
-
-	var msg DataBatch
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return DataBatch{}, err
-	}
-
-	msg.MetadataBatch.Topic = r.Topic
-	msg.MetadataBatch.Key = r.Key
-
-	return msg, nil
 }
 
 func RunExampleBatch(ctx context.Context, _ *sync.WaitGroup) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigBatch,
 		wkafka.WithConsumer(consumeConfigBatch),
-		wkafka.WithClientInfo("testapp", "v0.1.0"),
+		wkafka.WithClientInfo("testappbatch", "v0.1.0"),
 	)
 	if err != nil {
 		return err
@@ -70,10 +68,7 @@ func RunExampleBatch(ctx context.Context, _ *sync.WaitGroup) error {
 
 	defer client.Close()
 
-	if err := client.Consume(ctx,
-		wkafka.WithCallbackBatch(ProcessBatch),
-		wkafka.WithDecode(Decode),
-	); err != nil {
+	if err := client.Consume(ctx, wkafka.WithCallbackBatch(ProcessBatch)); err != nil {
 		return fmt.Errorf("consume: %w", err)
 	}
 

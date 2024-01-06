@@ -74,7 +74,8 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			// when error return than it will not be committed
 			if err := c.iterationDLQ(ctx, r); err != nil {
 				if errors.Is(err, errPartitionRevoked) {
-					// don't commit revoked record
+					// don't commit revoked partition
+					// above check also skip others on that partition
 					continue
 				}
 
@@ -145,6 +146,7 @@ func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) er
 	if err := c.iterationRecord(ctx, r); err != nil {
 		errOrg, ok := isDQLError(err)
 		if !ok {
+			// it is not DLQ error, return it
 			return err
 		}
 

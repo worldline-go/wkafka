@@ -1,8 +1,11 @@
 package wkafka
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -58,6 +61,61 @@ func wrapErr(r *kgo.Record, err error, dlq bool) error {
 	)
 }
 
+func errorOffsetList(records []*kgo.Record) string {
+	topicPartitionOffsets := make(map[string]map[int32][]int)
+
+	// Organizing the records by topic and partition
+	for _, record := range records {
+		if _, ok := topicPartitionOffsets[record.Topic]; !ok {
+			topicPartitionOffsets[record.Topic] = make(map[int32][]int)
+		}
+		topicPartitionOffsets[record.Topic][record.Partition] = append(topicPartitionOffsets[record.Topic][record.Partition], int(record.Offset))
+	}
+
+	// Formatting the offsets
+	result := make(map[string]map[string]string)
+	for topic, partitions := range topicPartitionOffsets {
+		result[topic] = make(map[string]string)
+		for partition, offsets := range partitions {
+			sort.Ints(offsets) // Ensure offsets are sorted
+			result[topic][strconv.Itoa(int(partition))] = formatOffsets(offsets)
+		}
+	}
+
+	jsonResult, _ := json.Marshal(result)
+	return string(jsonResult)
+}
+
+// formatOffsets formats a slice of ints into a string, grouping consecutive numbers.
+func formatOffsets(offsets []int) string {
+	if len(offsets) == 0 {
+		return ""
+	}
+
+	var result string
+	start := offsets[0]
+	end := start
+
+	for i := 1; i < len(offsets); i++ {
+		if offsets[i] == end+1 {
+			end = offsets[i]
+		} else {
+			result += formatRange(start, end) + ","
+			start = offsets[i]
+			end = start
+		}
+	}
+	result += formatRange(start, end)
+	return result
+}
+
+// formatRange formats a range of numbers into a string.
+func formatRange(start, end int) string {
+	if start == end {
+		return strconv.Itoa(start)
+	}
+	return strconv.Itoa(start) + "-" + strconv.Itoa(end)
+}
 func unwrapErr(err error) error {
 	return errors.Unwrap(err)
 }
