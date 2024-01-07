@@ -99,8 +99,10 @@ if err != nil {
 defer client.Close()
 ```
 
-Now you need to run consumer with a handler function.  
-There is 2 options to run consumer, batch or single (__WithCallbackBatch__ or __WithCallback__).
+Now you need to run consumer with a callback function.  
+There is 2 options to run consumer, batch or single (__WithCallbackBatch__ or __WithCallback__).  
+Default decoder is json, but you can change it with __WithDecode__ option.  
+If you use `[]byte` as data type then raw data will be passed to the callback function, batch consumer like `[][]byte` type.
 
 ```go
 // example single consumer
