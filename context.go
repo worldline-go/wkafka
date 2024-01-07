@@ -12,6 +12,7 @@ const (
 )
 
 // CtxIsDLQ usable in the callback function to understand processing a DLQ message.
+//   - If the context is nil, or the isDLQ is not set, false is returned.
 func CtxIsDLQ(ctx context.Context) bool {
 	if ctx == nil {
 		return false
@@ -25,6 +26,7 @@ func CtxIsDLQ(ctx context.Context) bool {
 // CtxRecord returns the *Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
 //   - This is only used in callback function.
+//   - Don't edit the returned *Record!
 func CtxRecord(ctx context.Context) *Record {
 	if ctx == nil {
 		return nil
@@ -38,6 +40,7 @@ func CtxRecord(ctx context.Context) *Record {
 // CtxRecordBatch returns the []*Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
 //   - This is only used in batch callback function.
+//   - Don't edit the returned []*Record!
 func CtxRecordBatch(ctx context.Context) []*Record {
 	if ctx == nil {
 		return nil

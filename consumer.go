@@ -9,14 +9,14 @@ import (
 
 type ConsumerConfig struct {
 	// Topics is a list of kafka topics to consume.
-	// Required at least one topic. Default is "default-topic" for local development.
-	Topics []string `cfg:"topics" default:"default-topic"`
+	// Required at least one topic, topic name if not exist will be created or consumer waits for topic creation.
+	Topics []string `cfg:"topics"`
 	// GroupID is the kafka consumer group ID, unique per application.
 	// All created with the same ID will not be able to see messages that another consumer
 	// is consuming. If a message is committed and that consumer fails for some reason,
 	// another consumer with the same group ID will pick up where the other left off.
-	// Required. Default is "default-group-id" for local development.
-	GroupID string `cfg:"group_id" default:"default-group-id"`
+	// Required.
+	GroupID string `cfg:"group_id"`
 	// StartOffset is used when there is no committed offset for GroupID.
 	//
 	// Available options:

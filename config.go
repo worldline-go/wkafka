@@ -14,8 +14,8 @@ type Config struct {
 	// Brokers is a list of kafka brokers to connect to.
 	// Not all brokers need to be specified, the list is so that
 	// if one broker is unavailable, another can be used.
-	// Required at least one broker. Default is "localhost:9092" for local development.
-	Brokers  []string       `cfg:"brokers"  default:"localhost:9092"`
+	// Required at least one broker. Example value is 'localhost:9092'.
+	Brokers  []string       `cfg:"brokers"`
 	Security SecurityConfig `cfg:"security"`
 	// Compressions is chosen in the order preferred based on broker support.
 	// The default is to use no compression.
@@ -26,6 +26,7 @@ type Config struct {
 	//  - zstd
 	Compressions []string `cfg:"compressions"`
 
+	// Consumer is a pre configuration for consumer and validation.
 	Consumer ConsumerPreConfig `cfg:"consumer"`
 }
 

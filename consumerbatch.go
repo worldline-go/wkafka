@@ -133,16 +133,16 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 			if !ok {
 				// it is not DLQ error, return it
 				// this will fail the service
-				return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(records))
+				return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 			}
 
 			if c.ProduceDLQ != nil {
-				if err := c.ProduceDLQ(ctx, err, records); err != nil {
-					return fmt.Errorf("produce to DLQ failed: %w; offsets: %s", err, errorOffsetList(records))
+				if err := c.ProduceDLQ(ctx, err, batchRecords); err != nil {
+					return fmt.Errorf("produce to DLQ failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 				}
 			} else {
 				// returning a batch error could be confusing
-				return fmt.Errorf("process batch failed: %w; offsets: %s", errOrg, errorOffsetList(records))
+				return fmt.Errorf("process batch failed: %w; offsets: %s", errOrg, errorOffsetList(batchRecords))
 			}
 		}
 
