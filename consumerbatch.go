@@ -185,6 +185,11 @@ func (c *consumerBatch[T]) batchIterationDLQ(ctx context.Context, cl *kgo.Client
 
 			return wrapErr(r, err, c.IsDLQ)
 		}
+
+		// commit if not see any error
+		if err := cl.CommitRecords(ctx, r); err != nil {
+			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), c.IsDLQ)
+		}
 	}
 
 	return nil
