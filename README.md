@@ -20,7 +20,7 @@ First set the connection config to create a new kafka client.
 Main config struct that contains brokers, security settings and consumer validation.
 
 ```yaml
-brokers:
+brokers: # list of brokers, default is empty
   - localhost:9092
 security:
   tls:
