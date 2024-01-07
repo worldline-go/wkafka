@@ -19,7 +19,7 @@ type consumerBatch[T any] struct {
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
 	Option           optionConsumer
-	ProduceDLQ       func(ctx context.Context, err error, records []*kgo.Record) error
+	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
 	Logger           logz.Adapter
 	PartitionHandler *partitionHandler
@@ -137,12 +137,12 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 			}
 
 			if c.ProduceDLQ != nil {
-				if err := c.ProduceDLQ(ctx, err, batchRecords); err != nil {
+				if err := c.ProduceDLQ(ctx, errOrg, batchRecords); err != nil {
 					return fmt.Errorf("produce to DLQ failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 				}
 			} else {
 				// returning a batch error could be confusing
-				return fmt.Errorf("process batch failed: %w; offsets: %s", errOrg, errorOffsetList(batchRecords))
+				return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 			}
 		}
 
@@ -209,9 +209,15 @@ func (c *consumerBatch[T]) iterationDLQ(ctx context.Context, r *kgo.Record) erro
 		}
 
 		if err := c.iterationRecordDLQ(ctx, r); err != nil {
-			errOrg, _ := isDQLError(err)
-			errWrapped := wrapErr(r, errOrg, c.IsDLQ)
-			c.Logger.Error("process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
+			errOrg, ok := isDQLError(err)
+			var errWrapped error
+			if ok {
+				errWrapped = wrapErr(r, errOrg.Err, c.IsDLQ)
+			} else {
+				errWrapped = wrapErr(r, err, c.IsDLQ)
+			}
+
+			c.Logger.Error("DLQ process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
 
 			if err := wait.Sleep(ctx); err != nil {
 				return err

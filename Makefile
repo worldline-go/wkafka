@@ -51,6 +51,10 @@ lint: .golangci.yml bin/golangci-lint-$(GOLANGCI_LINT_VERSION) ## Lint Go files
 test: ## Run unit tests
 	@go test -v -race ./...
 
+.PHONY: test-short
+test-short: ## Run unit tests short
+	@go test -v -race -short ./...
+
 .PHONY: test-without-cache
 test-without-cache: ## Run unit tests without cache
 	@go test -count=1 -v -race ./...

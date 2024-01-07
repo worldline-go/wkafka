@@ -70,7 +70,7 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 		}
 
 		if consumerConfig.DLQ.SkipExtra == nil {
-			consumerConfig.DLQ.SkipExtra = map[string]map[int32]Offsets{
+			consumerConfig.DLQ.SkipExtra = map[string]map[int32]OffsetConfig{
 				consumerConfig.DLQ.Topic: consumerConfig.DLQ.Skip,
 			}
 		} else {

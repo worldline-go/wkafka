@@ -50,7 +50,7 @@ func ProcessBatch(_ context.Context, msg []DataBatch) error {
 	}
 
 	if anyError {
-		return fmt.Errorf("test error: %w", wkafka.ErrDLQ)
+		return wkafka.WrapErrDLQ(fmt.Errorf("test error"))
 	}
 
 	return nil

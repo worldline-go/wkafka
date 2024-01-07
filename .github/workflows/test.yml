@@ -20,11 +20,11 @@ jobs:
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
-        args: --timeout 5m --new-from-rev=HEAD~1 --issues-exit-code=0
+        args: --timeout 5m --new-from-rev=HEAD~1
     - name: Run tests
       run: |
-        GOPATH="$(dirname ${PWD})" golangci-lint run --out-format checkstyle ./... > golangci-lint-report.out || true
-        go test -coverprofile=coverage.out -json ./... > test-report.out
+        GOPATH="$(dirname ${PWD})" golangci-lint run --out-format --issues-exit-code=0 checkstyle ./... > golangci-lint-report.out || true
+        go test -short -coverprofile=coverage.out -json ./... > test-report.out
     - name: SonarCloud Scan
       uses: sonarsource/sonarcloud-github-action@master
       with:

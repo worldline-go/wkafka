@@ -19,35 +19,46 @@ var (
 	// ErrSkip is use to skip message in the PreCheck hook or Decode function.
 	ErrSkip = fmt.Errorf("skip message")
 	// ErrDLQ use with callback function to send message to DLQ topic.
-	ErrDLQ = fmt.Errorf("send to DLQ")
+	// Prefer to use WrapErrDLQ to wrap error.
+	ErrDLQ = fmt.Errorf("error DLQ")
 )
 
-// DLQIndexedError is use with callback function to send message to DLQ topic with specific index.
-type DLQIndexedError struct {
+// DLQError is use with callback function to send message to DLQ topic.
+type DLQError struct {
 	// Err is default error to add in header.
+	// If not setted, header will just show "DLQ indexed error"
 	Err error
-	// Indexes if not empty, use to add error in specific index.
+	// Indexes to use send specific batch index to DLQ.
+	// If index's error is nil, default error is used.
 	Indexes map[int]error
 }
 
-func (e *DLQIndexedError) Error() string {
+func WrapErrDLQ(err error) error {
+	return &DLQError{Err: err}
+}
+
+func (e *DLQError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+
 	return "DLQ indexed error"
 }
 
-// isDQLError check if error is DLQ error and return the original error or error.
-func isDQLError(err error) (error, bool) {
-	if errors.Is(err, ErrDLQ) {
-		return unwrapErr(err), true
-	}
-
-	var errDLQIndexed *DLQIndexedError
+// isDQLError check if error is DLQ error and return it.
+func isDQLError(err error) (*DLQError, bool) {
+	var errDLQIndexed *DLQError
 
 	ok := errors.As(err, &errDLQIndexed)
 	if ok {
-		return errDLQIndexed.Err, true
+		return errDLQIndexed, true
 	}
 
-	return err, false
+	if errors.Is(err, ErrDLQ) {
+		return &DLQError{Err: err}, true
+	}
+
+	return nil, false
 }
 
 func wrapErr(r *kgo.Record, err error, dlq bool) error {
@@ -115,9 +126,6 @@ func formatRange(start, end int) string {
 		return strconv.Itoa(start)
 	}
 	return strconv.Itoa(start) + "-" + strconv.Itoa(end)
-}
-func unwrapErr(err error) error {
-	return errors.Unwrap(err)
 }
 
 func stringHeader(headers []Header) string {

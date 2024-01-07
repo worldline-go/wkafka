@@ -109,6 +109,8 @@ if err := client.Consume(ctx, wkafka.WithCallback(ProcessSingle)); err != nil {
 }
 ```
 
+Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the error and it will be send to dead letter queue.
+
 > Check the aditional options for custom decode and precheck.
 
 ### Producer

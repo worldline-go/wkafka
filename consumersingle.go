@@ -19,7 +19,7 @@ type consumerSingle[T any] struct {
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
 	Option           optionConsumer
-	ProduceDLQ       func(ctx context.Context, err error, records []*kgo.Record) error
+	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
 	Logger           logz.Adapter
 	PartitionHandler *partitionHandler
@@ -124,9 +124,15 @@ func (c *consumerSingle[T]) iterationDLQ(ctx context.Context, r *kgo.Record) err
 		}
 
 		if err := c.iterationRecord(ctx, r); err != nil {
-			errOrg, _ := isDQLError(err)
-			errWrapped := wrapErr(r, errOrg, c.IsDLQ)
-			c.Logger.Error("process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
+			errOrg, ok := isDQLError(err)
+			var errWrapped error
+			if ok {
+				errWrapped = wrapErr(r, errOrg.Err, c.IsDLQ)
+			} else {
+				errWrapped = wrapErr(r, err, c.IsDLQ)
+			}
+
+			c.Logger.Error("DLQ process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
 
 			if err := wait.Sleep(ctx); err != nil {
 				return err
@@ -144,7 +150,7 @@ func (c *consumerSingle[T]) iterationDLQ(ctx context.Context, r *kgo.Record) err
 // iterationMain is used to listen main topics.
 func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) error {
 	if err := c.iterationRecord(ctx, r); err != nil {
-		errOrg, ok := isDQLError(err)
+		errDLQ, ok := isDQLError(err)
 		if !ok {
 			// it is not DLQ error, return it
 			return err
@@ -152,14 +158,14 @@ func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) er
 
 		// send to DLQ if enabled
 		if c.ProduceDLQ != nil {
-			if err := c.ProduceDLQ(ctx, err, []*kgo.Record{r}); err != nil {
+			if err := c.ProduceDLQ(ctx, errDLQ, []*kgo.Record{r}); err != nil {
 				return fmt.Errorf("produce to DLQ failed: %w", err)
 			}
 
 			return nil
 		}
 
-		return errOrg
+		return err
 	}
 
 	return nil

@@ -35,7 +35,7 @@ type ConsumerConfig struct {
 	//        - 31
 	//        - 90
 	//      before: 20 // skip all offsets before or equal to this offset
-	Skip map[string]map[int32]Offsets `cfg:"skip"`
+	Skip map[string]map[int32]OffsetConfig `cfg:"skip"`
 	// MaxPollRecords is the maximum number of records returned in a single call to poll.
 	//  - Default is max.poll.records in the broker configuration, usually 500.
 	//  - Fetching messages from broker, this is not related with batch processing!
@@ -46,10 +46,10 @@ type ConsumerConfig struct {
 	//  - Default is 100.
 	BatchCount int `cfg:"batch_count"`
 	// DLQ is a dead letter queue configuration.
-	DLQ DLQ `cfg:"dlq"`
+	DLQ DLQConfig `cfg:"dlq"`
 }
 
-type DLQ struct {
+type DLQConfig struct {
 	// Disable is a flag to disable DLQ.
 	//  - Default is false.
 	//  - If topic is not set, it will be generated from format_dlq_topic.
@@ -73,16 +73,16 @@ type DLQ struct {
 	//      - 31
 	//      - 90
 	//    before: 20 // skip all offsets before or equal to this offset
-	Skip map[int32]Offsets `cfg:"skip"`
+	Skip map[int32]OffsetConfig `cfg:"skip"`
 	// Topic is a topic name to send messages that failed to process also could be used for DLQ.
 	Topic string `cfg:"topic"`
 	// TopicExtra is extra a list of kafka topics to just consume from DLQ.
 	TopicsExtra []string `cfg:"topics_extra"`
 	// SkipExtra are optional message offsets to be skipped for topicsExtra.
-	SkipExtra map[string]map[int32]Offsets `cfg:"skip_extra"`
+	SkipExtra map[string]map[int32]OffsetConfig `cfg:"skip_extra"`
 }
 
-type Offsets struct {
+type OffsetConfig struct {
 	// Offsets is a list of offsets numbers in that partition to skip.
 	Offsets []int64 `cfg:"offsets"`
 	// Before skips all offsets before or equal to this offset.
@@ -261,7 +261,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 	}
 }
 
-func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Record) (T, error), func(ctx context.Context, err error, records []*kgo.Record) error) {
+func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Record) (T, error), func(ctx context.Context, err *DLQError, records []*kgo.Record) error) {
 	var decode func(raw []byte, r *kgo.Record) (T, error)
 
 	var msg T
@@ -272,9 +272,9 @@ func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Reco
 		decode = codecJSON[T]{}.Decode
 	}
 
-	var produceDLQ func(ctx context.Context, err error, records []*kgo.Record) error
+	var produceDLQ func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	if !o.ConsumerConfig.DLQ.Disable {
-		produceDLQ = producerDLQ(o.ConsumerConfig.DLQ.Topic, o.Client.ProduceRaw)
+		produceDLQ = producerDLQ(o.ConsumerConfig.DLQ.Topic, o.Client.clientID, o.Client.ProduceRaw)
 	}
 
 	return decode, produceDLQ

@@ -1,6 +1,7 @@
 package wkafka
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -78,6 +79,58 @@ func Test_errorOffsetList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := errorOffsetList(tt.args.r); got != tt.want {
 				t.Errorf("errorOffsetList() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_isDQLError(t *testing.T) {
+	errTest := fmt.Errorf("some error")
+	type args struct {
+		err error
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr string
+		wantOk  bool
+	}{
+		{
+			name: "dlq error",
+			args: args{
+				err: WrapErrDLQ(errTest),
+			},
+			wantErr: "some error",
+			wantOk:  true,
+		},
+		{
+			name: "not dlq error",
+			args: args{
+				err: errTest,
+			},
+			wantOk: false,
+		},
+		{
+			name: "dlq error",
+			args: args{
+				err: fmt.Errorf("some error: %w", ErrDLQ),
+			},
+			wantErr: "some error: error DLQ",
+			wantOk:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err, ok := isDQLError(tt.args.err)
+			if ok != tt.wantOk {
+				t.Errorf("isDQLError() ok = %v, wantOk %v", ok, tt.wantOk)
+				return
+			}
+			if !tt.wantOk {
+				return
+			}
+			if err.Error() != tt.wantErr {
+				t.Errorf("isDQLError() = %v, want %v", err, tt.wantErr)
 			}
 		})
 	}

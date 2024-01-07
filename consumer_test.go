@@ -92,6 +92,10 @@ func (c *Counter[T]) Count(ctx context.Context, msg T) error {
 }
 
 func Test_GroupConsuming(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	client, err := tkafka.TestClient()
 	if err != nil {
 		t.Fatalf("TestClient() error = %v", err)

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/worldline-go/wkafka"
 )
 
@@ -23,20 +25,28 @@ var (
 )
 
 type DataSingle struct {
-	Test       int  `json:"test"`
-	IsErr      bool `json:"is_err"`
-	IsErrFatal bool `json:"is_err_fatal"`
+	Test       int    `json:"test"`
+	Timeout    string `json:"timeout"`
+	IsErr      bool   `json:"is_err"`
+	IsErrFatal bool   `json:"is_err_fatal"`
 }
 
 func ProcessSingle(_ context.Context, msg DataSingle) error {
 	slog.Info("callback", slog.Any("test", msg.Test), slog.Bool("is_err", msg.IsErr))
+
+	if duration, err := time.ParseDuration(msg.Timeout); err != nil {
+		log.Error().Err(err).Msg("parse duration")
+	} else {
+		log.Info().Dur("duration", duration).Msg("sleep")
+		time.Sleep(duration)
+	}
 
 	if msg.IsErrFatal {
 		return fmt.Errorf("test fatal error %d", msg.Test)
 	}
 
 	if msg.IsErr {
-		return fmt.Errorf("test error %d: %w", msg.Test, wkafka.ErrDLQ)
+		return wkafka.WrapErrDLQ(fmt.Errorf("test error %d", msg.Test))
 	}
 
 	return nil

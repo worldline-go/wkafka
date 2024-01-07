@@ -1,3 +1,4 @@
 /bin
 /.golangci.yml
 /coverage.*
+/*.out

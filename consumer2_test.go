@@ -40,7 +40,7 @@ func Test_skip(t *testing.T) {
 			name: "skip topic",
 			args: args{
 				cfg: &ConsumerConfig{
-					Skip: map[string]map[int32]Offsets{
+					Skip: map[string]map[int32]OffsetConfig{
 						"topic": {
 							0: {
 								Offsets: []int64{
@@ -62,7 +62,7 @@ func Test_skip(t *testing.T) {
 			name: "skip topic before",
 			args: args{
 				cfg: &ConsumerConfig{
-					Skip: map[string]map[int32]Offsets{
+					Skip: map[string]map[int32]OffsetConfig{
 						"topic": {
 							0: {
 								Before: 5,
@@ -82,7 +82,7 @@ func Test_skip(t *testing.T) {
 			name: "topic before",
 			args: args{
 				cfg: &ConsumerConfig{
-					Skip: map[string]map[int32]Offsets{
+					Skip: map[string]map[int32]OffsetConfig{
 						"topic": {
 							0: {
 								Before: 5,
@@ -145,8 +145,8 @@ func Test_skipDLQ(t *testing.T) {
 			name: "skip topic",
 			args: args{
 				cfg: &ConsumerConfig{
-					DLQ: DLQ{
-						SkipExtra: map[string]map[int32]Offsets{
+					DLQ: DLQConfig{
+						SkipExtra: map[string]map[int32]OffsetConfig{
 							"topic": {
 								0: {
 									Offsets: []int64{
@@ -169,8 +169,8 @@ func Test_skipDLQ(t *testing.T) {
 			name: "skip topic before",
 			args: args{
 				cfg: &ConsumerConfig{
-					DLQ: DLQ{
-						SkipExtra: map[string]map[int32]Offsets{
+					DLQ: DLQConfig{
+						SkipExtra: map[string]map[int32]OffsetConfig{
 							"topic": {
 								0: {
 									Before: 5,
@@ -191,8 +191,8 @@ func Test_skipDLQ(t *testing.T) {
 			name: "topic before",
 			args: args{
 				cfg: &ConsumerConfig{
-					DLQ: DLQ{
-						SkipExtra: map[string]map[int32]Offsets{
+					DLQ: DLQConfig{
+						SkipExtra: map[string]map[int32]OffsetConfig{
 							"topic": {
 								0: {
 									Before: 5,
