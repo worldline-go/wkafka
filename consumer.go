@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -288,8 +289,14 @@ func WithDecode[T any](fn func(raw []byte, r *kgo.Record) (T, error)) OptionCons
 		switch v := o.Consumer.(type) {
 		case *consumerBatch[T]:
 			v.Decode = fn
+			//nolint:forcetypeassert // internally checked
+			o.ConsumerDLQ.(*consumerBatch[T]).Decode = fn
 		case *consumerSingle[T]:
 			v.Decode = fn
+			//nolint:forcetypeassert // internally checked
+			o.ConsumerDLQ.(*consumerSingle[T]).Decode = fn
+		default:
+			return fmt.Errorf("WithDecode unknown data type %T", v)
 		}
 
 		return nil
@@ -315,6 +322,8 @@ func WithCallbackDLQ[T any](fn func(ctx context.Context, msg T) error) OptionCon
 			v.ProcessDLQ = fn
 		case *consumerSingle[T]:
 			v.ProcessDLQ = fn
+		default:
+			return fmt.Errorf("WithDecode unknown data type %T", v)
 		}
 
 		return nil
