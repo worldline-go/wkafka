@@ -33,7 +33,7 @@ func producerDLQ(topic string, clientID []byte, fn func(ctx context.Context, rec
 				Value: r.Value,
 				Headers: append(
 					r.Headers,
-					kgo.RecordHeader{Key: defaultServiceNameKey, Value: clientID},
+					kgo.RecordHeader{Key: "process", Value: clientID},
 					kgo.RecordHeader{Key: "error", Value: []byte(errOrg.Error())},
 					kgo.RecordHeader{Key: "offset", Value: []byte(strconv.FormatInt(r.Offset, 10))},
 					kgo.RecordHeader{Key: "partition", Value: []byte(strconv.FormatInt(int64(r.Partition), 10))},

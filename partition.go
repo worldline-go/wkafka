@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"context"
+	"sync"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
@@ -12,15 +13,23 @@ type partitionHandler struct {
 
 	mapPartitionsRevoked map[string][]int32
 	mapPartitionsLost    map[string][]int32
+
+	mutex sync.RWMutex
 }
 
 // Flush is used to flush the partition handler and it will be ready next poll.
 func (h *partitionHandler) Flush() {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	h.mapPartitionsRevoked = nil
 	h.mapPartitionsLost = nil
 }
 
 func (h *partitionHandler) AddPartitionsRevoked(mapPartitions map[string][]int32) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	if h.mapPartitionsRevoked == nil {
 		h.mapPartitionsRevoked = make(map[string][]int32, len(mapPartitions))
 	}
@@ -31,6 +40,9 @@ func (h *partitionHandler) AddPartitionsRevoked(mapPartitions map[string][]int32
 }
 
 func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
 	if h.mapPartitionsLost == nil {
 		h.mapPartitionsLost = make(map[string][]int32, len(mapPartitions))
 	}
@@ -41,6 +53,9 @@ func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
 }
 
 func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	if len(h.mapPartitionsRevoked) == 0 {
 		return false
 	}
@@ -61,6 +76,9 @@ func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
 // IsRevokedRecordBatch is used to check if the record is revoked.
 //   - If the record is revoked, it will be skipped and returns just valid records.
 func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, bool) {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
 	if len(h.mapPartitionsRevoked) == 0 {
 		return records, false
 	}

@@ -33,7 +33,7 @@ type DLQError struct {
 	Indexes map[int]error
 }
 
-func WrapErrDLQ(err error) error {
+func WrapErrDLQ(err error) *DLQError {
 	return &DLQError{Err: err}
 }
 
