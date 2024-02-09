@@ -19,6 +19,7 @@ var examples = map[string]func(context.Context, *sync.WaitGroup) error{
 	"admin_partition":      admin.RunExamplePartition,
 	"admin_list":           admin.RunExampleList,
 	"consumer_batch":       consumer.RunExampleBatch,
+	"consumer_batch_err":   consumer.RunExampleBatchErr,
 	"consumer_single":      consumer.RunExampleSingle,
 	"consumer_single_byte": consumer.RunExampleSingleByte,
 	"producer_hook":        producer.RunExampleHook,

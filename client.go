@@ -227,6 +227,8 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	// consume main and dlq concurrently
 	g, ctx := errgroup.WithContext(ctx)
 
+	ctx = context.WithValue(ctx, KeyIsDLQEnabled, true)
+
 	g.Go(func() error {
 		c.logger.Info("wkafka start consuming", "topics", c.topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {

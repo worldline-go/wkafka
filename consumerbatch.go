@@ -262,7 +262,7 @@ func (c *consumerBatch[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record
 	}
 
 	ctxCallback := context.WithValue(ctx, KeyRecord, r)
-	ctxCallback = context.WithValue(ctxCallback, KeyIsDLQ, true)
+	ctxCallback = context.WithValue(ctxCallback, KeyIsDLQProcess, true)
 	if err := c.ProcessDLQ(ctxCallback, data); err != nil {
 		return err
 	}
