@@ -22,9 +22,9 @@ env-logs: ## Show env logs
 env-down: ## Stop env
 	docker compose -p wkafka down
 
-.PHONY: run-example
-run-example: LOG_LEVEL ?= debug
-run-example: ## Run example
+.PHONY: example
+example: LOG_LEVEL ?= debug
+example: ## Run example
 	LOG_LEVEL=$(LOG_LEVEL) go run ./example/main.go
 
 .PHONY: ci-run

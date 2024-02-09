@@ -68,7 +68,9 @@ func RunExampleBatch(ctx context.Context, _ *sync.WaitGroup) error {
 
 	defer client.Close()
 
-	if err := client.Consume(ctx, wkafka.WithCallbackBatch(ProcessBatch)); err != nil {
+	if err := client.Consume(ctx,
+		wkafka.WithCallbackBatch(ProcessBatch),
+	); err != nil {
 		return fmt.Errorf("consume: %w", err)
 	}
 

@@ -20,6 +20,11 @@ type Client struct {
 	clientID       []byte
 	consumerConfig *ConsumerConfig
 	logger         logz.Adapter
+
+	// log purpose
+
+	dlqTopics []string
+	topics    []string
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -37,6 +42,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		if err := configApply(cfg.Consumer, o.ConsumerConfig, o.AppName, o.Logger); err != nil {
 			return nil, fmt.Errorf("validate config: %w", err)
 		}
+
+		if !o.ConsumerConfig.DLQ.Disable {
+			o.ConsumerDLQEnabled = true
+		}
 	}
 
 	c := &Client{
@@ -51,7 +60,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	var kgoClientDLQ *kgo.Client
-	if o.ConsumerEnabled {
+	if o.ConsumerDLQEnabled {
 		kgoClientDLQ, err = newClient(c, cfg, &o, true)
 		if err != nil {
 			return nil, err
@@ -154,8 +163,10 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			}
 
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(topics...))
+			c.dlqTopics = topics
 		} else {
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.Topics...))
+			c.topics = o.ConsumerConfig.Topics
 		}
 	}
 
@@ -203,7 +214,9 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 		return fmt.Errorf("consumer is nil: %w", errNotImplemented)
 	}
 
-	if o.ConsumerDLQ == nil {
+	// consume main only
+	if c.KafkaDLQ == nil {
+		c.logger.Info("wkafka start consuming", "topics", c.topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume: %w", err)
 		}
@@ -215,6 +228,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
+		c.logger.Info("wkafka start consuming", "topics", c.topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume: %w", err)
 		}
@@ -223,6 +237,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	})
 
 	g.Go(func() error {
+		c.logger.Info("wkafka start consuming DLQ", "topics", c.dlqTopics)
 		if err := o.ConsumerDLQ.Consume(ctx, c.KafkaDLQ); err != nil {
 			return fmt.Errorf("failed to consume DLQ: %w", err)
 		}

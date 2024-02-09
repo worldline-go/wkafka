@@ -9,9 +9,10 @@ import (
 var DefaultBatchCount = 100
 
 type options struct {
-	AppName         string
-	ConsumerEnabled bool
-	ConsumerConfig  *ConsumerConfig
+	AppName            string
+	ConsumerEnabled    bool
+	ConsumerDLQEnabled bool
+	ConsumerConfig     *ConsumerConfig
 	// Consumer          consumer
 	ClientID          string
 	KGOOptions        []kgo.Opt
