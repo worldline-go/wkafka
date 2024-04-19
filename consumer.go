@@ -176,6 +176,7 @@ type optionConsumer struct {
 	Consumer       consumer
 	ConsumerDLQ    consumer
 	ConsumerConfig ConsumerConfig
+	Meter          Meter
 }
 
 type (
@@ -215,6 +216,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Skip:             skip,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandler,
+			Meter:            o.Meter,
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
@@ -246,6 +248,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Skip:             skip,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandler,
+			Meter:            o.Meter,
 		}
 
 		o.ConsumerDLQ = &consumerSingle[T]{

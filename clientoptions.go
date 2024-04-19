@@ -19,6 +19,7 @@ type options struct {
 	KGOOptionsDLQ     []kgo.Opt
 	AutoTopicCreation bool
 	Logger            logz.Adapter
+	Meter             Meter
 }
 
 func (o *options) apply(opts ...Option) {
@@ -36,6 +37,12 @@ type Option func(*options)
 func WithClientID(clientID string) Option {
 	return func(o *options) {
 		o.ClientID = clientID
+	}
+}
+
+func WithMeter(m Meter) Option {
+	return func(o *options) {
+		o.Meter = m
 	}
 }
 
