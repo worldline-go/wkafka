@@ -3,7 +3,6 @@ package wkafka
 import (
 	"context"
 	"fmt"
-
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -25,6 +24,7 @@ type Client struct {
 
 	dlqTopics []string
 	topics    []string
+	Meter     Meter
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -48,10 +48,15 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		}
 	}
 
+	if o.Meter == nil {
+		o.Meter = EmptyMeter()
+	}
+
 	c := &Client{
 		consumerConfig: o.ConsumerConfig,
 		logger:         o.Logger,
 		clientID:       []byte(o.ClientID),
+		Meter:          o.Meter,
 	}
 
 	kgoClient, err := newClient(c, cfg, &o, false)
@@ -202,6 +207,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	o := optionConsumer{
 		Client:         c,
 		ConsumerConfig: *c.consumerConfig,
+		Meter:          c.Meter,
 	}
 
 	opts = append([]OptionConsumer{OptionConsumer(callback)}, opts...)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
+	"time"
 )
 
 type consumerSingle[T any] struct {
@@ -24,6 +24,7 @@ type consumerSingle[T any] struct {
 	Logger           logz.Adapter
 	PartitionHandler *partitionHandler
 	IsDLQ            bool
+	Meter            Meter
 }
 
 func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -68,23 +69,31 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			continue
 		}
 
+		start := time.Now()
 		if c.IsDLQ {
 			// listening DLQ topics
 			// check partition is revoked and not commit it!
 			// when error return than it will not be committed
 			if err := c.iterationDLQ(ctx, r); err != nil {
+				c.Meter.Meter(start, 1, r.Topic, err, true)
 				if errors.Is(err, errPartitionRevoked) {
 					// don't commit revoked partition
 					// above check also skip others on that partition
 					continue
 				}
-
 				return wrapErr(r, err, c.IsDLQ)
+			} else {
+				c.Meter.Meter(start, 1, r.Topic, nil, true)
 			}
+
 		} else {
 			// listening main topics
+
 			if err := c.iterationMain(ctx, r); err != nil {
+				c.Meter.Meter(start, 1, r.Topic, err, false)
 				return wrapErr(r, err, c.IsDLQ)
+			} else {
+				c.Meter.Meter(start, 1, r.Topic, nil, false)
 			}
 
 			// maybe working on that record is too long and partition is revoked

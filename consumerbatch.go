@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
+	"time"
 )
 
 type consumerBatch[T any] struct {
@@ -24,6 +24,7 @@ type consumerBatch[T any] struct {
 	Logger           logz.Adapter
 	PartitionHandler *partitionHandler
 	IsDLQ            bool
+	Meter            Meter
 }
 
 func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -128,7 +129,9 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 
 		// add records to context so callback can see the records when needed
 		ctxCallback := context.WithValue(ctx, KeyRecord, batchRecords)
+		start := time.Now()
 		if err := c.Process(ctxCallback, batch); err != nil {
+			c.Meter.Meter(start, int64(len(batch)), r.Topic, err, false)
 			errOrg, ok := isDQLError(err)
 			if !ok {
 				// it is not DLQ error, return it
@@ -144,6 +147,8 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 				// returning a batch error could be confusing
 				return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 			}
+		} else {
+			c.Meter.Meter(start, int64(len(batch)), r.Topic, err, false)
 		}
 
 		// if partitions are revoked then don't commit, filter out revoked records
