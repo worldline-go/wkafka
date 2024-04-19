@@ -3,6 +3,7 @@ package wkafka
 import (
 	"context"
 	"fmt"
+
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -33,6 +34,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		AutoTopicCreation: true,
 		AppName:           idProgname,
 		Logger:            logz.AdapterKV{Log: log.Logger},
+		Meter:             EmptyMeter(),
 	}
 
 	o.apply(opts...)
@@ -46,10 +48,6 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		if !o.ConsumerConfig.DLQ.Disable {
 			o.ConsumerDLQEnabled = true
 		}
-	}
-
-	if o.Meter == nil {
-		o.Meter = EmptyMeter()
 	}
 
 	c := &Client{

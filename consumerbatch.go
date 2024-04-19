@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
-	"time"
 )
 
 type consumerBatch[T any] struct {

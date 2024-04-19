@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
-	"time"
 )
 
 type consumerSingle[T any] struct {
@@ -85,7 +86,6 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			} else {
 				c.Meter.Meter(start, 1, r.Topic, nil, true)
 			}
-
 		} else {
 			// listening main topics
 
