@@ -8,6 +8,8 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+type SkipMap = map[string]map[int32]OffsetConfig
+
 type ConsumerConfig struct {
 	// Topics is a list of kafka topics to consume.
 	// Required at least one topic, topic name if not exist will be created or consumer waits for topic creation.
@@ -79,8 +81,6 @@ type DLQConfig struct {
 	Topic string `cfg:"topic"`
 	// TopicExtra is extra a list of kafka topics to just consume from DLQ.
 	TopicsExtra []string `cfg:"topics_extra"`
-	// SkipExtra are optional message offsets to be skipped for topicsExtra.
-	SkipExtra map[string]map[int32]OffsetConfig `cfg:"skip_extra"`
 }
 
 type OffsetConfig struct {
@@ -110,72 +110,11 @@ type consumer interface {
 	setPreCheck(fn func(ctx context.Context, r *kgo.Record) error)
 }
 
-func skip(cfg *ConsumerConfig, r *kgo.Record) bool {
-	if len(cfg.Skip) == 0 {
-		return false
-	}
-
-	if _, ok := cfg.Skip[r.Topic]; !ok {
-		return false
-	}
-
-	if _, ok := cfg.Skip[r.Topic][r.Partition]; !ok {
-		return false
-	}
-
-	offsets := cfg.Skip[r.Topic][r.Partition]
-
-	if offsets.Before > 0 && r.Offset <= offsets.Before {
-		return true
-	}
-
-	for _, offset := range offsets.Offsets {
-		if r.Offset == offset {
-			return true
-		}
-	}
-
-	return false
-}
-
-func skipDLQ(cfg *ConsumerConfig, r *kgo.Record) bool {
-	dlqCfg := cfg.DLQ
-	if dlqCfg.Disable {
-		return false
-	}
-
-	if len(dlqCfg.SkipExtra) == 0 {
-		return false
-	}
-
-	if _, ok := dlqCfg.SkipExtra[r.Topic]; !ok {
-		return false
-	}
-
-	if _, ok := dlqCfg.SkipExtra[r.Topic][r.Partition]; !ok {
-		return false
-	}
-
-	offsets := dlqCfg.SkipExtra[r.Topic][r.Partition]
-
-	if offsets.Before > 0 && r.Offset <= offsets.Before {
-		return true
-	}
-
-	for _, offset := range offsets.Offsets {
-		if r.Offset == offset {
-			return true
-		}
-	}
-
-	return false
-}
-
 type optionConsumer struct {
 	Client         *Client
 	Consumer       consumer
 	ConsumerDLQ    consumer
-	ConsumerConfig ConsumerConfig
+	ConsumerConfig *ConsumerConfig
 	Meter          Meter
 }
 
@@ -213,20 +152,25 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Decode:           decode,
 			ProduceDLQ:       produceDLQ,
 			Cfg:              o.ConsumerConfig,
-			Skip:             skip,
+			Skip:             newSkipper(&o.Client.consumerMutex, false),
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandler,
 			Meter:            o.Meter,
+		}
+
+		if o.ConsumerConfig.DLQ.Disable {
+			return nil
 		}
 
 		o.ConsumerDLQ = &consumerBatch[T]{
 			Decode:           decode,
 			ProcessDLQ:       dlqProcessBatch(fn),
 			Cfg:              o.ConsumerConfig,
-			Skip:             skipDLQ,
+			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disable),
 			IsDLQ:            true,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
+			Meter:            o.Meter,
 		}
 
 		return nil
@@ -245,20 +189,25 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Decode:           decode,
 			ProduceDLQ:       produceDLQ,
 			Cfg:              o.ConsumerConfig,
-			Skip:             skip,
+			Skip:             newSkipper(&o.Client.consumerMutex, false),
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandler,
 			Meter:            o.Meter,
+		}
+
+		if o.ConsumerConfig.DLQ.Disable {
+			return nil
 		}
 
 		o.ConsumerDLQ = &consumerSingle[T]{
 			ProcessDLQ:       fn,
 			Decode:           decode,
 			Cfg:              o.ConsumerConfig,
-			Skip:             skipDLQ,
+			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disable),
 			IsDLQ:            true,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
+			Meter:            o.Meter,
 		}
 
 		return nil

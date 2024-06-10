@@ -15,14 +15,15 @@ import (
 )
 
 var examples = map[string]func(context.Context, *sync.WaitGroup) error{
-	"admin_topic":          admin.RunExampleTopic,
-	"admin_partition":      admin.RunExamplePartition,
-	"admin_list":           admin.RunExampleList,
-	"consumer_batch":       consumer.RunExampleBatch,
-	"consumer_batch_err":   consumer.RunExampleBatchErr,
-	"consumer_single":      consumer.RunExampleSingle,
-	"consumer_single_byte": consumer.RunExampleSingleByte,
-	"producer_hook":        producer.RunExampleHook,
+	"admin_topic":             admin.RunExampleTopic,
+	"admin_partition":         admin.RunExamplePartition,
+	"admin_list":              admin.RunExampleList,
+	"consumer_batch":          consumer.RunExampleBatch,
+	"consumer_batch_err":      consumer.RunExampleBatchErr,
+	"consumer_single":         consumer.RunExampleSingle,
+	"consumer_single_handler": consumer.RunExampleSingleWithHandler,
+	"consumer_single_byte":    consumer.RunExampleSingleByte,
+	"producer_hook":           producer.RunExampleHook,
 }
 
 func getExampleList() []string {
@@ -52,5 +53,5 @@ func main() {
 		return
 	}
 
-	initializer.Init(run, initializer.WithOptionsLogz(logz.WithCaller(false)))
+	initializer.Init(run, initializer.WithLogger(initializer.Slog), initializer.WithOptionsLogz(logz.WithCaller(false)))
 }

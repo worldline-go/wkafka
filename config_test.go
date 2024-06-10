@@ -40,11 +40,11 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 			},
 			want: ConsumerConfig{
 				GroupID: "finops_test",
+				Skip: map[string]map[int32]OffsetConfig{
+					"finops_serviceX_dlq": nil,
+				},
 				DLQ: DLQConfig{
-					Topic: "finops_serviceX_dlq",
-					SkipExtra: map[string]map[int32]OffsetConfig{
-						"finops_serviceX_dlq": nil,
-					},
+					Topic:         "finops_serviceX_dlq",
 					RetryInterval: DefaultRetryInterval,
 				},
 			},

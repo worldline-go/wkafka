@@ -15,7 +15,7 @@ type consumerBatch[T any] struct {
 	Process func(ctx context.Context, msg []T) error
 	// ProcessDLQ is nil for main consumer.
 	ProcessDLQ func(ctx context.Context, msg T) error
-	Cfg        ConsumerConfig
+	Cfg        *ConsumerConfig
 	Decode     func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
@@ -95,7 +95,7 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 
 		// skip precheck and record section
 		/////////////////////////////////
-		if c.Skip(&c.Cfg, r) {
+		if c.Skip(c.Cfg, r) {
 			continue
 		}
 
@@ -244,7 +244,7 @@ func (c *consumerBatch[T]) iterationDLQ(ctx context.Context, r *kgo.Record) erro
 }
 
 func (c *consumerBatch[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) error {
-	if c.Skip(&c.Cfg, r) {
+	if c.Skip(c.Cfg, r) {
 		return nil
 	}
 

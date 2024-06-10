@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package wkafka;
+
+enum SkipOption {
+    APPEND = 0;
+    REPLACE = 1;
+}
+
+message CreateSkipRequest {
+    map<string, Topic> topics = 1;
+    SkipOption option = 2;
+}
+
+message Topic {
+    map<int32, Partition> partitions = 1;
+}
+
+message Partition {
+    repeated int64 offsets = 1;
+    int64 before = 2;
+}
+
+message Response {
+    string message = 1;
+}
+
+service WkafkaService {
+	rpc Skip (CreateSkipRequest) returns (Response);
+}

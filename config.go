@@ -69,12 +69,12 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 			}
 		}
 
-		if consumerConfig.DLQ.SkipExtra == nil {
-			consumerConfig.DLQ.SkipExtra = map[string]map[int32]OffsetConfig{
+		if consumerConfig.Skip == nil {
+			consumerConfig.Skip = map[string]map[int32]OffsetConfig{
 				consumerConfig.DLQ.Topic: consumerConfig.DLQ.Skip,
 			}
 		} else {
-			consumerConfig.DLQ.SkipExtra[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
+			consumerConfig.Skip[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
 		}
 
 		if consumerConfig.DLQ.RetryInterval == 0 {

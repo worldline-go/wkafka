@@ -92,6 +92,8 @@ func WithKGOOptionsDLQ(opts ...kgo.Opt) Option {
 	}
 }
 
+// WithConsumer configures the client to use the provided consumer config.
+//   - It is shallow copied and to make safe use skip function to modify skip map.
 func WithConsumer(cfg ConsumerConfig) Option {
 	return func(o *options) {
 		o.ConsumerConfig = &cfg

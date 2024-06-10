@@ -3,6 +3,7 @@ package wkafka
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -19,6 +20,7 @@ type Client struct {
 
 	clientID       []byte
 	consumerConfig *ConsumerConfig
+	consumerMutex  sync.RWMutex
 	logger         logz.Adapter
 
 	// log purpose
@@ -34,7 +36,6 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		AutoTopicCreation: true,
 		AppName:           idProgname,
 		Logger:            logz.AdapterKV{Log: log.Logger},
-		Meter:             EmptyMeter(),
 	}
 
 	o.apply(opts...)
@@ -48,6 +49,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		if !o.ConsumerConfig.DLQ.Disable {
 			o.ConsumerDLQEnabled = true
 		}
+	}
+
+	if o.Meter == nil {
+		o.Meter = noopMeter()
 	}
 
 	c := &Client{
@@ -204,7 +209,7 @@ func (c *Client) Close() {
 func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...OptionConsumer) error {
 	o := optionConsumer{
 		Client:         c,
-		ConsumerConfig: *c.consumerConfig,
+		ConsumerConfig: c.consumerConfig,
 		Meter:          c.Meter,
 	}
 
@@ -268,4 +273,17 @@ func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 // Admin returns an admin client to manage kafka.
 func (c *Client) Admin() *kadm.Client {
 	return kadm.NewClient(c.Kafka)
+}
+
+func (c *Client) Skip(modify func(SkipMap) SkipMap) {
+	c.consumerMutex.Lock()
+	defer c.consumerMutex.Unlock()
+
+	if modify == nil {
+		return
+	}
+
+	c.consumerConfig.Skip = modify(c.consumerConfig.Skip)
+
+	c.logger.Debug("wkafka skip modified", "skip", c.consumerConfig.Skip)
 }

@@ -15,7 +15,7 @@ type consumerSingle[T any] struct {
 	Process func(ctx context.Context, msg T) error
 	// ProcessDLQ is nil for main consumer.
 	ProcessDLQ func(ctx context.Context, msg T) error
-	Cfg        ConsumerConfig
+	Cfg        *ConsumerConfig
 	Decode     func(raw []byte, r *kgo.Record) (T, error)
 	// PreCheck is a function that is called before the callback and decode.
 	PreCheck         func(ctx context.Context, r *kgo.Record) error
@@ -64,7 +64,6 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
-
 		// check partition is revoked
 		if c.PartitionHandler.IsRevokedRecord(r) {
 			continue
@@ -88,7 +87,6 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			}
 		} else {
 			// listening main topics
-
 			if err := c.iterationMain(ctx, r); err != nil {
 				c.Meter.Meter(start, 1, r.Topic, err, false)
 				return wrapErr(r, err, c.IsDLQ)
@@ -181,7 +179,7 @@ func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) er
 }
 
 func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
-	if c.Skip(&c.Cfg, r) {
+	if c.Skip(c.Cfg, r) {
 		return nil
 	}
 

@@ -115,6 +115,21 @@ Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the e
 
 > Check the aditional options for custom decode and precheck.
 
+
+#### Skip Handler
+
+Editing the skip map and use our handler to initialize server mux.
+
+```go
+mux := http.NewServeMux()
+mux.Handle(handler.New(client))
+
+reflector := grpcreflect.NewStaticReflector(wkafkaconnect.WkafkaServiceName)
+
+mux.Handle(grpcreflect.NewHandlerV1(reflector))
+mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+```
+
 ### Producer
 
 Use consumer client or create without consumer settings, `New` also try to connect to brokers.

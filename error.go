@@ -12,15 +12,15 @@ import (
 )
 
 var (
-	errNotImplemented   = fmt.Errorf("not implemented")
-	errClientClosed     = fmt.Errorf("client closed")
-	errPartitionRevoked = fmt.Errorf("partition revoked")
+	errNotImplemented   = errors.New("not implemented")
+	errClientClosed     = errors.New("client closed")
+	errPartitionRevoked = errors.New("partition revoked")
 
 	// ErrSkip is use to skip message in the PreCheck hook or Decode function.
-	ErrSkip = fmt.Errorf("skip message")
+	ErrSkip = errors.New("skip message")
 	// ErrDLQ use with callback function to send message to DLQ topic.
 	// Prefer to use WrapErrDLQ to wrap error.
-	ErrDLQ = fmt.Errorf("error DLQ")
+	ErrDLQ = errors.New("error DLQ")
 )
 
 // DLQError is use with callback function to send message to DLQ topic.

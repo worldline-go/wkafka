@@ -4,11 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
+	"connectrpc.com/grpcreflect"
+	"github.com/worldline-go/initializer"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/worldline-go/wkafka"
+	"github.com/worldline-go/wkafka/handler"
+	"github.com/worldline-go/wkafka/handler/gen/wkafka/wkafkaconnect"
 )
 
 var (
@@ -35,9 +43,9 @@ func ProcessSingle(_ context.Context, msg DataSingle) error {
 	slog.Info("callback", slog.Any("test", msg.Test), slog.Bool("is_err", msg.IsErr))
 
 	if duration, err := time.ParseDuration(msg.Timeout); err != nil {
-		log.Error().Err(err).Msg("parse duration")
+		slog.Error("parse duration", "error", err.Error())
 	} else {
-		log.Info().Dur("duration", duration).Msg("sleep")
+		slog.Info("sleep", slog.Duration("duration", duration))
 		time.Sleep(duration)
 	}
 
@@ -69,4 +77,52 @@ func RunExampleSingle(ctx context.Context, _ *sync.WaitGroup) error {
 	}
 
 	return nil
+}
+
+func RunExampleSingleWithHandler(ctx context.Context, _ *sync.WaitGroup) error {
+	client, err := wkafka.New(
+		ctx, kafkaConfigSingle,
+		wkafka.WithConsumer(consumeConfigSingle),
+		wkafka.WithClientInfo("testapp", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
+	if err != nil {
+		return err
+	}
+
+	defer client.Close()
+
+	mux := http.NewServeMux()
+	mux.Handle(handler.New(client))
+
+	reflector := grpcreflect.NewStaticReflector(wkafkaconnect.WkafkaServiceName)
+
+	mux.Handle(grpcreflect.NewHandlerV1(reflector))
+	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+
+	s := http.Server{
+		Addr:    ":8080",
+		Handler: h2c.NewHandler(mux, &http2.Server{}),
+	}
+
+	initializer.Shutdown.Add(s.Close)
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		slog.Info("started listening on :8080")
+
+		go func() {
+			<-ctx.Done()
+			s.Close()
+		}()
+
+		return s.ListenAndServe()
+	})
+
+	g.Go(func() error {
+		return client.Consume(ctx, wkafka.WithCallback(ProcessSingle))
+	})
+
+	return g.Wait()
 }

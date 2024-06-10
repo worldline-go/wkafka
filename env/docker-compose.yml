@@ -17,7 +17,7 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
   redpanda:
-    image: docker.io/redpandadata/console:v2.3.8
+    image: docker.io/redpandadata/console:v2.6.0
     ports:
       - "7071:7071"
     environment:

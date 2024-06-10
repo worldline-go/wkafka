@@ -1,6 +1,8 @@
 package wkafka
 
 import (
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -102,121 +104,96 @@ func Test_skip(t *testing.T) {
 			},
 		},
 	}
+
+	var cfgMutex sync.RWMutex
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := skip(tt.args.cfg, tt.args.r); got != tt.want {
+			if got := newSkipper(&cfgMutex, false)(tt.args.cfg, tt.args.r); got != tt.want {
 				t.Errorf("skip() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_skipDLQ(t *testing.T) {
+func TestSkipAppend(t *testing.T) {
 	type args struct {
-		cfg *ConsumerConfig
-		r   *kgo.Record
+		skip SkipMap
+		base SkipMap
 	}
 	tests := []struct {
 		name string
 		args args
-		want bool
+		want SkipMap
 	}{
 		{
 			name: "empty",
 			args: args{
-				cfg: &ConsumerConfig{},
-				r:   &kgo.Record{},
+				skip: nil,
 			},
-			want: false,
+			want: nil,
 		},
 		{
-			name: "empty config",
+			name: "mixed",
 			args: args{
-				cfg: &ConsumerConfig{},
-				r: &kgo.Record{
-					Topic:     "topic",
-					Partition: 0,
-					Offset:    5,
+				base: map[string]map[int32]OffsetConfig{
+					"topic2": {
+						0: {
+							Before:  10,
+							Offsets: []int64{1, 2, 3},
+						},
+					},
+					"topic": {
+						0: {
+							Offsets: []int64{11},
+						},
+					},
 				},
-			},
-			want: false,
-		},
-		{
-			name: "skip topic",
-			args: args{
-				cfg: &ConsumerConfig{
-					DLQ: DLQConfig{
-						SkipExtra: map[string]map[int32]OffsetConfig{
-							"topic": {
-								0: {
-									Offsets: []int64{
-										5,
-									},
-								},
+				skip: map[string]map[int32]OffsetConfig{
+					"topic2": {
+						1: {
+							Before:  5,
+							Offsets: []int64{9, 10},
+						},
+					},
+					"topic": {
+						0: {
+							Before: 5,
+							Offsets: []int64{
+								9,
+								10,
 							},
 						},
 					},
 				},
-				r: &kgo.Record{
-					Topic:     "topic",
-					Partition: 0,
-					Offset:    5,
-				},
 			},
-			want: true,
-		},
-		{
-			name: "skip topic before",
-			args: args{
-				cfg: &ConsumerConfig{
-					DLQ: DLQConfig{
-						SkipExtra: map[string]map[int32]OffsetConfig{
-							"topic": {
-								0: {
-									Before: 5,
-								},
-							},
-						},
+			want: map[string]map[int32]OffsetConfig{
+				"topic2": {
+					0: {
+						Before:  10,
+						Offsets: []int64{1, 2, 3},
+					},
+					1: {
+						Before:  5,
+						Offsets: []int64{9, 10},
 					},
 				},
-				r: &kgo.Record{
-					Topic:     "topic",
-					Partition: 0,
-					Offset:    5,
-				},
-			},
-			want: true,
-		},
-		{
-			name: "topic before",
-			args: args{
-				cfg: &ConsumerConfig{
-					DLQ: DLQConfig{
-						SkipExtra: map[string]map[int32]OffsetConfig{
-							"topic": {
-								0: {
-									Before: 5,
-									Offsets: []int64{
-										9,
-										10,
-									},
-								},
-							},
+				"topic": {
+					0: {
+						Before: 5,
+						Offsets: []int64{
+							11,
+							9,
+							10,
 						},
 					},
-				},
-				r: &kgo.Record{
-					Topic:     "topic",
-					Partition: 0,
-					Offset:    6,
 				},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := skipDLQ(tt.args.cfg, tt.args.r); got != tt.want {
-				t.Errorf("skipDLQ() = %v, want %v", got, tt.want)
+			if got := SkipAppend(tt.args.skip)(tt.args.base); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("SkipAppend() = %v, want %v", got, tt.want)
 			}
 		})
 	}
