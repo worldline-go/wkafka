@@ -10,6 +10,6 @@ plugins:
   - plugin: connect-go
     out: ../gen
     opt: paths=source_relative
-  - plugin: go-grpc
-    out: ../gen
-    opt: paths=source_relative
+  # - plugin: go-grpc
+  #   out: ../gen
+  #   opt: paths=source_relative
