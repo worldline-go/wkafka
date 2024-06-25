@@ -5,11 +5,10 @@ import (
 	"sync"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 )
 
 type partitionHandler struct {
-	logger logz.Adapter
+	logger Logger
 
 	mapPartitionsRevoked map[string][]int32
 	mapPartitionsLost    map[string][]int32

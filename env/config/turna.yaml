@@ -1,0 +1,18 @@
+server:
+  entrypoints:
+    web:
+      address: ":8082"
+  http:
+    middlewares:
+      view:
+        view:
+          prefix_path: /
+          info:
+            grpc:
+              - name: "wkafka"
+                addr: "dns:///localhost:8080"
+    routers:
+      view:
+        path: /
+        middlewares:
+          - view

@@ -130,6 +130,21 @@ mux.Handle(grpcreflect.NewHandlerV1(reflector))
 mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
 ```
 
+<details><summary>Handler Example</summary>
+
+```sh
+make env
+
+# run the example
+EXAMPLE=consumer_single_handler make example
+```
+
+Add messages in here to skip the message http://localhost:7071
+
+Go to this side for grpcUI http://localhost:8082/#/grpc/wkafka
+
+</details>
+
 ### Producer
 
 Use consumer client or create without consumer settings, `New` also try to connect to brokers.

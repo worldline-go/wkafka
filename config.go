@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"time"
-
-	"github.com/worldline-go/logz"
 )
 
 var DefaultRetryInterval = 10 * time.Second
@@ -45,7 +43,7 @@ type ConsumerPreConfig struct {
 }
 
 // configApply configuration to ConsumerConfig and check validation.
-func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName string, logger logz.Adapter) error {
+func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName string, logger Logger) error {
 	if c.PrefixGroupID != "" {
 		consumerConfig.GroupID = c.PrefixGroupID + consumerConfig.GroupID
 	}

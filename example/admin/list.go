@@ -15,7 +15,7 @@ var (
 )
 
 func RunExampleList(ctx context.Context, _ *sync.WaitGroup) error {
-	client, err := wkafka.New(ctx, kafkaConfigList)
+	client, err := wkafka.New(ctx, kafkaConfigList, wkafka.WithPingRetry(true))
 	if err != nil {
 		return err
 	}

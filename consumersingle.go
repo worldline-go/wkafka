@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 )
 
 type consumerSingle[T any] struct {
@@ -22,7 +21,7 @@ type consumerSingle[T any] struct {
 	Option           optionConsumer
 	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
-	Logger           logz.Adapter
+	Logger           Logger
 	PartitionHandler *partitionHandler
 	IsDLQ            bool
 	Meter            Meter
@@ -180,6 +179,8 @@ func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) er
 
 func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
 	if c.Skip(c.Cfg, r) {
+		c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
+
 		return nil
 	}
 

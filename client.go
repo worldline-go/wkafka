@@ -2,15 +2,20 @@ package wkafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
 	"golang.org/x/sync/errgroup"
 )
+
+var ErrConnection = errors.New("connect to kafka brokers failed")
 
 type Client struct {
 	Kafka               *kgo.Client
@@ -21,10 +26,11 @@ type Client struct {
 	clientID       []byte
 	consumerConfig *ConsumerConfig
 	consumerMutex  sync.RWMutex
-	logger         logz.Adapter
+	logger         Logger
 
 	// log purpose
 
+	Brokers   []string
 	dlqTopics []string
 	topics    []string
 	Meter     Meter
@@ -36,6 +42,8 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		AutoTopicCreation: true,
 		AppName:           idProgname,
 		Logger:            logz.AdapterKV{Log: log.Logger},
+		Ping:              true,
+		PingRetry:         false,
 	}
 
 	o.apply(opts...)
@@ -78,10 +86,34 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	c.Kafka = kgoClient
 	c.KafkaDLQ = kgoClientDLQ
 
-	// main and dlq use same config, ask for validation once
-	if err := c.Kafka.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("connection to kafka brokers: %w", err)
+	if o.Ping {
+		if o.PingRetry {
+			if o.PingBackoff == nil {
+				o.PingBackoff = defaultBackoff()
+			}
+
+			b := backoff.WithContext(o.PingBackoff, ctx)
+
+			if err := backoff.RetryNotify(func() error {
+				if err := c.Kafka.Ping(ctx); err != nil {
+					return fmt.Errorf("%w: %w", ErrConnection, err)
+				}
+
+				return nil
+			}, b, func(err error, d time.Duration) {
+				c.logger.Warn("wkafka ping failed", "error", err.Error(), "retry_in", d.String())
+			}); err != nil {
+				return nil, err
+			}
+		} else {
+			// main and dlq use same config, ask for validation once
+			if err := c.Kafka.Ping(ctx); err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrConnection, err)
+			}
+		}
 	}
+
+	c.Brokers = cfg.Brokers
 
 	return c, nil
 }
@@ -203,6 +235,10 @@ func (c *Client) Close() {
 	}
 }
 
+func (c *Client) DLQTopics() []string {
+	return c.dlqTopics
+}
+
 // Consume starts consuming messages from kafka and blocks until context is done or an error occurs.
 //   - Only works if client is created with consumer config.
 //   - Just run one time.
@@ -267,7 +303,11 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 	result := c.Kafka.ProduceSync(ctx, records...)
 
-	return result.FirstErr()
+	if err := result.FirstErr(); err != nil {
+		return errors.Join(ctx.Err(), err)
+	}
+
+	return nil
 }
 
 // Admin returns an admin client to manage kafka.

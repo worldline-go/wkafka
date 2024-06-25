@@ -17,9 +17,14 @@ services:
       - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
   redpanda:
-    image: docker.io/redpandadata/console:v2.6.0
+    image: docker.io/redpandadata/console:v2.3.10
     ports:
       - "7071:7071"
     environment:
       - KAFKA_BROKERS=kafka:9094
       - SERVER_LISTENPORT=7071
+  turna:
+    image: ghcr.io/rakunlabs/turna:v0.7.0-alpine3.20.0
+    network_mode: host
+    volumes:
+      - ./config/turna.yaml:/turna.yaml

@@ -10,7 +10,7 @@ import (
 type Generate struct {
 	kadm *kadm.Client
 
-	Topics []string
+	Topics map[string]struct{}
 }
 
 type Topic struct {
@@ -24,12 +24,35 @@ type Topic struct {
 
 func NewGenerate(c *wkafka.Client) *Generate {
 	return &Generate{
-		kadm: c.Admin(),
+		kadm:   c.Admin(),
+		Topics: make(map[string]struct{}),
 	}
 }
 
 func (g *Generate) Cleanup() (kadm.DeleteTopicResponses, error) {
-	return g.kadm.DeleteTopics(context.Background(), g.Topics...)
+	return g.kadm.DeleteTopics(context.Background(), g.getTopics()...)
+}
+
+func (g *Generate) getTopics() []string {
+	topics := make([]string, 0, len(g.Topics))
+	for t := range g.Topics {
+		topics = append(topics, t)
+	}
+
+	return topics
+}
+
+func (g *Generate) DeleteTopics(ctx context.Context, topics ...string) (kadm.DeleteTopicResponses, error) {
+	// remove the topics from the list of topics
+	for _, t := range topics {
+		delete(g.Topics, t)
+	}
+
+	return g.kadm.DeleteTopics(ctx, topics...)
+}
+
+func (g *Generate) DeleteGroups(ctx context.Context, groups ...string) (kadm.DeleteGroupResponses, error) {
+	return g.kadm.DeleteGroups(ctx, groups...)
 }
 
 func (g *Generate) CreateTopics(ctx context.Context, topics ...Topic) ([]kadm.CreateTopicResponse, error) {
@@ -46,10 +69,11 @@ func (g *Generate) CreateTopics(ctx context.Context, topics ...Topic) ([]kadm.Cr
 		}
 
 		response, err := g.kadm.CreateTopic(ctx, partitions, replicationFactor, nil, t.Name)
-		g.Topics = append(g.Topics, t.Name)
 		if err != nil {
 			return nil, err
 		}
+
+		g.Topics[t.Name] = struct{}{}
 
 		responses = append(responses, response)
 	}

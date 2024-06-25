@@ -10,6 +10,7 @@ enum SkipOption {
 message CreateSkipRequest {
     map<string, Topic> topics = 1;
     SkipOption option = 2;
+    bool enable_main_topics = 3;
 }
 
 message Topic {

@@ -1,12 +1,22 @@
 package wkafka
 
 import (
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 )
 
 // DefaultBatchCount is default batch count for batch consumer, if not set.
 var DefaultBatchCount = 100
+
+func defaultBackoff() backoff.BackOff {
+	return backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(2*time.Second),
+		backoff.WithMaxInterval(7*time.Second),
+		backoff.WithMaxElapsedTime(30*time.Second),
+	)
+}
 
 type options struct {
 	AppName            string
@@ -18,8 +28,12 @@ type options struct {
 	KGOOptions        []kgo.Opt
 	KGOOptionsDLQ     []kgo.Opt
 	AutoTopicCreation bool
-	Logger            logz.Adapter
+	Logger            Logger
 	Meter             Meter
+
+	Ping        bool
+	PingRetry   bool
+	PingBackoff backoff.BackOff
 }
 
 func (o *options) apply(opts ...Option) {
@@ -62,6 +76,7 @@ func WithClientInfo(appName, version string) Option {
 // Use WithClientInfo instead if you want to set version and appname.
 func WithAppName(appName string) Option {
 	return func(o *options) {
+		o.ClientID = appName + "@" + idHostname
 		o.AppName = appName
 	}
 }
@@ -104,7 +119,7 @@ func WithConsumer(cfg ConsumerConfig) Option {
 // WithLogger configures the client to use the provided logger.
 //   - For zerolog logz.AdapterKV{Log: logger} can usable.
 //   - Default is using zerolog's global logger.
-func WithLogger(logger logz.Adapter) Option {
+func WithLogger(logger Logger) Option {
 	return func(o *options) {
 		o.Logger = logger
 	}
@@ -114,7 +129,28 @@ func WithLogger(logger logz.Adapter) Option {
 func WithNoLogger(v bool) Option {
 	return func(o *options) {
 		if v {
-			o.Logger = logz.AdapterNoop{}
+			o.Logger = LogNoop{}
 		}
+	}
+}
+
+// WithPing to ping kafka brokers on client creation.
+//   - Default is enabled.
+func WithPing(v bool) Option {
+	return func(o *options) {
+		o.Ping = v
+	}
+}
+
+// WithPingRetry to retry ping kafka brokers on client creation.
+func WithPingRetry(v bool) Option {
+	return func(o *options) {
+		o.PingRetry = v
+	}
+}
+
+func WithPingBackoff(b backoff.BackOff) Option {
+	return func(o *options) {
+		o.PingBackoff = b
 	}
 }

@@ -93,7 +93,7 @@ func RunExampleSingleWithHandler(ctx context.Context, _ *sync.WaitGroup) error {
 	defer client.Close()
 
 	mux := http.NewServeMux()
-	mux.Handle(handler.New(client))
+	mux.Handle(handler.New(client, handler.WithLogger(slog.Default())))
 
 	reflector := grpcreflect.NewStaticReflector(wkafkaconnect.WkafkaServiceName)
 

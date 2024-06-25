@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 )
 
 type consumerBatch[T any] struct {
@@ -22,7 +21,7 @@ type consumerBatch[T any] struct {
 	Option           optionConsumer
 	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
-	Logger           logz.Adapter
+	Logger           Logger
 	PartitionHandler *partitionHandler
 	IsDLQ            bool
 	Meter            Meter
@@ -96,6 +95,8 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 		// skip precheck and record section
 		/////////////////////////////////
 		if c.Skip(c.Cfg, r) {
+			c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
+
 			continue
 		}
 
@@ -245,6 +246,8 @@ func (c *consumerBatch[T]) iterationDLQ(ctx context.Context, r *kgo.Record) erro
 
 func (c *consumerBatch[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) error {
 	if c.Skip(c.Cfg, r) {
+		c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
+
 		return nil
 	}
 

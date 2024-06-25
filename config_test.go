@@ -3,8 +3,6 @@ package wkafka
 import (
 	"reflect"
 	"testing"
-
-	"github.com/worldline-go/logz"
 )
 
 func TestConsumerPreConfig_Apply(t *testing.T) {
@@ -57,7 +55,7 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 				Validation:     tt.fields.Validation,
 				FormatDLQTopic: "finops_{{.AppName}}_dlq",
 			}
-			err := configApply(c, &tt.args.consumerConfig, "serviceX", logz.AdapterNoop{})
+			err := configApply(c, &tt.args.consumerConfig, "serviceX", LogNoop{})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ConsumerPreConfig.Apply() error = %v, wantErr %v", err, tt.wantErr)
 				return

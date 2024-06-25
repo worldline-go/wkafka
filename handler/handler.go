@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
+	"slices"
 
 	"connectrpc.com/connect"
 
@@ -15,12 +15,40 @@ import (
 
 type Handler struct {
 	Client *wkafka.Client
+
+	Logger wkafka.Logger
+}
+
+type option struct {
+	Logger wkafka.Logger
+}
+
+func (o *option) apply(opts ...Option) {
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	if o.Logger == nil {
+		o.Logger = wkafka.LogNoop{}
+	}
+}
+
+type Option func(*option)
+
+func WithLogger(logger wkafka.Logger) Option {
+	return func(o *option) {
+		o.Logger = logger
+	}
 }
 
 // NewHandler returns a http.Handler implementation.
-func New(client *wkafka.Client) (string, http.Handler) {
+func New(client *wkafka.Client, opts ...Option) (string, http.Handler) {
+	o := option{}
+	o.apply(opts...)
+
 	return wkafkaconnect.NewWkafkaServiceHandler(&Handler{
 		Client: client,
+		Logger: o.Logger,
 	})
 }
 
@@ -47,10 +75,21 @@ func convertSkipMap(skip map[string]*wkafkahandler.Topic) wkafka.SkipMap {
 
 func (h *Handler) Skip(ctx context.Context, req *connect.Request[wkafkahandler.CreateSkipRequest]) (*connect.Response[wkafkahandler.Response], error) {
 	topics := req.Msg.GetTopics()
-	slog.Debug("topics", slog.Any("topics", topics))
+	h.Logger.Debug("skip topics", "topics", topics)
 
-	for k, v := range topics {
-		slog.Debug("skip", slog.String("topic", k), slog.Any("partitions", v.GetPartitions()))
+	if !req.Msg.GetEnableMainTopics() {
+		dlqTopics := h.Client.DLQTopics()
+
+		deleteTopicsInList := make([]string, 0)
+		for k := range topics {
+			if !slices.Contains(dlqTopics, k) {
+				deleteTopicsInList = append(deleteTopicsInList, k)
+			}
+		}
+
+		for _, k := range deleteTopicsInList {
+			delete(topics, k)
+		}
 	}
 
 	switch req.Msg.GetOption() {
