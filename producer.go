@@ -8,7 +8,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-var defaultServiceNameKey = "service"
+const HeaderServiceKey = "service"
 
 type (
 	Header = kgo.RecordHeader
@@ -94,7 +94,7 @@ func NewProducer[T any](client *Client, topic string, opts ...OptionProducer) (*
 		Topic: topic,
 		Headers: []Header{
 			{
-				Key:   defaultServiceNameKey,
+				Key:   HeaderServiceKey,
 				Value: client.clientID,
 			},
 		},
@@ -114,6 +114,11 @@ func NewProducer[T any](client *Client, topic string, opts ...OptionProducer) (*
 type Producer[T any] struct {
 	config     producerConfig[T]
 	produceRaw func(ctx context.Context, records []*Record) error
+}
+
+// GetTopic to get producer default topic.
+func (p *Producer[T]) GetTopic() string {
+	return p.config.Topic
 }
 
 func (p *Producer[T]) Produce(ctx context.Context, data ...T) error {

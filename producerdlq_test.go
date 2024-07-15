@@ -69,7 +69,7 @@ func Test_producerDLQ(t *testing.T) {
 
 			for _, header := range records[i].Headers {
 				switch header.Key {
-				case defaultServiceNameKey:
+				case HeaderServiceKey:
 					assert.Equal(t, clientID, header.Value)
 				case "error":
 					assert.Equal(t, errDLQStr, string(header.Value))

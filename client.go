@@ -327,3 +327,7 @@ func (c *Client) Skip(modify func(SkipMap) SkipMap) {
 
 	c.logger.Debug("wkafka skip modified", "skip", c.consumerConfig.Skip)
 }
+
+func (c *Client) GetClientID() []byte {
+	return c.clientID
+}
