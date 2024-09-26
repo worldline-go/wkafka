@@ -56,7 +56,7 @@ topics: [] # list of topics to subscribe
 group_id: "" # group id to subscribe, make is as unique as possible per service
 # start offset to consume, 0 is the earliest offset, -1 is the latest offset and more than 0 is the offset number
 # group_id has already committed offset then this will be ignored
-start_offset: 0
+start_offset: 0 # -1 to start end of the offsets
 skip: # this is programatically skip, kafka will still consume the message
   # example skip topic and offset
   mytopic: # topic name to skip
@@ -72,10 +72,10 @@ max_poll_records: 0
 # if this value is more than max_poll_records then max_poll_records will be used
 batch_count: 100
 dlq:
-  disabled: false # disable dead letter queue
+  disable: false # disable dead letter queue
   topic: "" # dead letter topic name, it can be assigned in the kafka config's format_dlq_topic
   retry_interval: "10s" # retry time interval of the message if can't be processed, default is 10s
-  start_offset: 0 # same as start_offset but for dead letter topic
+  start_offset: 0 # -1 to start end of the offsets
   skip: # same as skip but just for dead letter topic and not need to specify topic name
     # example skip offset
     0:

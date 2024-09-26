@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/worldline-go/wkafka"
 )
@@ -18,7 +17,7 @@ func ProcessSingleByte(ctx context.Context, raw []byte) error {
 	return ProcessSingle(ctx, msg)
 }
 
-func RunExampleSingleByte(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleSingleByte(ctx context.Context) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigSingle,
 		wkafka.WithConsumer(consumeConfigSingle),

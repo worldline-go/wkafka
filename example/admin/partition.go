@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/worldline-go/wkafka"
 )
@@ -14,7 +13,7 @@ var (
 	}
 )
 
-func RunExamplePartition(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExamplePartition(ctx context.Context) error {
 	client, err := wkafka.New(ctx, kafkaConfigPartition)
 	if err != nil {
 		return err

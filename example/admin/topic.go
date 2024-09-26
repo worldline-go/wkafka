@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/worldline-go/wkafka"
 )
@@ -14,7 +13,7 @@ var (
 	}
 )
 
-func RunExampleTopic(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleTopic(ctx context.Context) error {
 	client, err := wkafka.New(ctx, kafkaConfigTopic)
 	if err != nil {
 		return err

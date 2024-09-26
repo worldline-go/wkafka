@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"connectrpc.com/grpcreflect"
-	"github.com/worldline-go/initializer"
+	"github.com/rakunlabs/into"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
@@ -60,7 +59,7 @@ func ProcessSingle(_ context.Context, msg DataSingle) error {
 	return nil
 }
 
-func RunExampleSingle(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleSingle(ctx context.Context) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigSingle,
 		wkafka.WithConsumer(consumeConfigSingle),
@@ -79,7 +78,7 @@ func RunExampleSingle(ctx context.Context, _ *sync.WaitGroup) error {
 	return nil
 }
 
-func RunExampleSingleWithHandler(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleSingleWithHandler(ctx context.Context) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigSingle,
 		wkafka.WithConsumer(consumeConfigSingle),
@@ -105,7 +104,7 @@ func RunExampleSingleWithHandler(ctx context.Context, _ *sync.WaitGroup) error {
 		Handler: h2c.NewHandler(mux, &http2.Server{}),
 	}
 
-	initializer.Shutdown.Add(s.Close)
+	into.ShutdownAdd(s.Close, "http server")
 
 	g, ctx := errgroup.WithContext(ctx)
 

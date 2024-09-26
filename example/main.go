@@ -5,16 +5,16 @@ import (
 	"log/slog"
 	"os"
 	"sort"
-	"sync"
 
-	"github.com/worldline-go/initializer"
-	"github.com/worldline-go/logz"
+	"github.com/rakunlabs/into"
+	"github.com/rakunlabs/logi"
+
 	"github.com/worldline-go/wkafka/example/admin"
 	"github.com/worldline-go/wkafka/example/consumer"
 	"github.com/worldline-go/wkafka/example/producer"
 )
 
-var examples = map[string]func(context.Context, *sync.WaitGroup) error{
+var examples = map[string]func(context.Context) error{
 	"admin_topic":             admin.RunExampleTopic,
 	"admin_partition":         admin.RunExamplePartition,
 	"admin_list":              admin.RunExampleList,
@@ -53,5 +53,8 @@ func main() {
 		return
 	}
 
-	initializer.Init(run, initializer.WithLogger(initializer.Slog), initializer.WithOptionsLogz(logz.WithCaller(false)))
+	into.Init(
+		run,
+		into.WithLogger(logi.InitializeLog(logi.WithCaller(false))),
+	)
 }

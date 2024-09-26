@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/rs/zerolog/log"
 	"github.com/worldline-go/wkafka"
@@ -70,7 +69,7 @@ func ProcessBatchErr(ctx context.Context, msg []DataBatchErr) error {
 	return nil
 }
 
-func RunExampleBatchErr(ctx context.Context, _ *sync.WaitGroup) error {
+func RunExampleBatchErr(ctx context.Context) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigBatchErr,
 		wkafka.WithConsumer(consumeConfigBatchErr),
