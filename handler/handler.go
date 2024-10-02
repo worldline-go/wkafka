@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/worldline-go/wkafka"
 	wkafkahandler "github.com/worldline-go/wkafka/handler/gen/wkafka"
@@ -73,25 +73,33 @@ func convertSkipMap(skip map[string]*wkafkahandler.Topic) wkafka.SkipMap {
 	return m
 }
 
-func (h *Handler) Skip(ctx context.Context, req *connect.Request[wkafkahandler.CreateSkipRequest]) (*connect.Response[wkafkahandler.Response], error) {
-	topics := req.Msg.GetTopics()
-	h.Logger.Debug("skip topics", "topics", topics)
+func (h *Handler) Info(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[wkafkahandler.InfoResponse], error) {
+	var skipList map[string]*wkafkahandler.Topic
+	h.Client.Skip(func(m wkafka.SkipMap) wkafka.SkipMap {
+		skipList = make(map[string]*wkafkahandler.Topic, len(m))
+		for k, v := range m {
+			p := make(map[int32]*wkafkahandler.Partition, len(v))
+			for k, v := range v {
+				p[k] = &wkafkahandler.Partition{
+					Before:  v.Before,
+					Offsets: v.Offsets,
+				}
+			}
 
-	if !req.Msg.GetEnableMainTopics() {
-		dlqTopics := h.Client.DLQTopics()
-
-		deleteTopicsInList := make([]string, 0)
-		for k := range topics {
-			if !slices.Contains(dlqTopics, k) {
-				deleteTopicsInList = append(deleteTopicsInList, k)
+			skipList[k] = &wkafkahandler.Topic{
+				Partitions: p,
 			}
 		}
 
-		for _, k := range deleteTopicsInList {
-			delete(topics, k)
-		}
-	}
+		return m
+	})
 
+	return connect.NewResponse(&wkafkahandler.InfoResponse{
+		Skip: skipList,
+	}), nil
+}
+
+func (h *Handler) Skip(ctx context.Context, req *connect.Request[wkafkahandler.CreateSkipRequest]) (*connect.Response[wkafkahandler.Response], error) {
 	switch req.Msg.GetOption() {
 	case wkafkahandler.SkipOption_APPEND:
 		h.Client.Skip(wkafka.SkipAppend(convertSkipMap(req.Msg.GetTopics())))

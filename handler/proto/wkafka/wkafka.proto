@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package wkafka;
 
+import "google/protobuf/empty.proto";
+
 enum SkipOption {
     APPEND = 0;
     REPLACE = 1;
@@ -10,7 +12,6 @@ enum SkipOption {
 message CreateSkipRequest {
     map<string, Topic> topics = 1;
     SkipOption option = 2;
-    bool enable_main_topics = 3;
 }
 
 message Topic {
@@ -26,6 +27,22 @@ message Response {
     string message = 1;
 }
 
+message InfoResponse {
+    map<string, Topic> skip = 1;
+    DLQMessage dlq = 2;
+}
+
+message DLQMessage {
+    string topic = 1;
+    int32 partition = 2;
+    int64 offset = 3;
+    string key = 4;
+    string value = 5;
+    string timestamp = 6;
+    map<string, string> headers = 7;
+}
+
 service WkafkaService {
 	rpc Skip (CreateSkipRequest) returns (Response);
+    rpc Info (google.protobuf.Empty) returns (InfoResponse);
 }

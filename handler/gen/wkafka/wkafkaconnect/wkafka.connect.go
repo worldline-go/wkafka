@@ -9,6 +9,7 @@ import (
 	context "context"
 	errors "errors"
 	wkafka "github.com/worldline-go/wkafka/handler/gen/wkafka"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	http "net/http"
 	strings "strings"
 )
@@ -35,17 +36,21 @@ const (
 const (
 	// WkafkaServiceSkipProcedure is the fully-qualified name of the WkafkaService's Skip RPC.
 	WkafkaServiceSkipProcedure = "/wkafka.WkafkaService/Skip"
+	// WkafkaServiceInfoProcedure is the fully-qualified name of the WkafkaService's Info RPC.
+	WkafkaServiceInfoProcedure = "/wkafka.WkafkaService/Info"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
 	wkafkaServiceServiceDescriptor    = wkafka.File_wkafka_wkafka_proto.Services().ByName("WkafkaService")
 	wkafkaServiceSkipMethodDescriptor = wkafkaServiceServiceDescriptor.Methods().ByName("Skip")
+	wkafkaServiceInfoMethodDescriptor = wkafkaServiceServiceDescriptor.Methods().ByName("Info")
 )
 
 // WkafkaServiceClient is a client for the wkafka.WkafkaService service.
 type WkafkaServiceClient interface {
 	Skip(context.Context, *connect.Request[wkafka.CreateSkipRequest]) (*connect.Response[wkafka.Response], error)
+	Info(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[wkafka.InfoResponse], error)
 }
 
 // NewWkafkaServiceClient constructs a client for the wkafka.WkafkaService service. By default, it
@@ -64,12 +69,19 @@ func NewWkafkaServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(wkafkaServiceSkipMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		info: connect.NewClient[emptypb.Empty, wkafka.InfoResponse](
+			httpClient,
+			baseURL+WkafkaServiceInfoProcedure,
+			connect.WithSchema(wkafkaServiceInfoMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // wkafkaServiceClient implements WkafkaServiceClient.
 type wkafkaServiceClient struct {
 	skip *connect.Client[wkafka.CreateSkipRequest, wkafka.Response]
+	info *connect.Client[emptypb.Empty, wkafka.InfoResponse]
 }
 
 // Skip calls wkafka.WkafkaService.Skip.
@@ -77,9 +89,15 @@ func (c *wkafkaServiceClient) Skip(ctx context.Context, req *connect.Request[wka
 	return c.skip.CallUnary(ctx, req)
 }
 
+// Info calls wkafka.WkafkaService.Info.
+func (c *wkafkaServiceClient) Info(ctx context.Context, req *connect.Request[emptypb.Empty]) (*connect.Response[wkafka.InfoResponse], error) {
+	return c.info.CallUnary(ctx, req)
+}
+
 // WkafkaServiceHandler is an implementation of the wkafka.WkafkaService service.
 type WkafkaServiceHandler interface {
 	Skip(context.Context, *connect.Request[wkafka.CreateSkipRequest]) (*connect.Response[wkafka.Response], error)
+	Info(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[wkafka.InfoResponse], error)
 }
 
 // NewWkafkaServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -94,10 +112,18 @@ func NewWkafkaServiceHandler(svc WkafkaServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(wkafkaServiceSkipMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	wkafkaServiceInfoHandler := connect.NewUnaryHandler(
+		WkafkaServiceInfoProcedure,
+		svc.Info,
+		connect.WithSchema(wkafkaServiceInfoMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wkafka.WkafkaService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WkafkaServiceSkipProcedure:
 			wkafkaServiceSkipHandler.ServeHTTP(w, r)
+		case WkafkaServiceInfoProcedure:
+			wkafkaServiceInfoHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -109,4 +135,8 @@ type UnimplementedWkafkaServiceHandler struct{}
 
 func (UnimplementedWkafkaServiceHandler) Skip(context.Context, *connect.Request[wkafka.CreateSkipRequest]) (*connect.Response[wkafka.Response], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wkafka.WkafkaService.Skip is not implemented"))
+}
+
+func (UnimplementedWkafkaServiceHandler) Info(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[wkafka.InfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wkafka.WkafkaService.Info is not implemented"))
 }

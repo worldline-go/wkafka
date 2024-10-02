@@ -53,11 +53,11 @@ type ConsumerConfig struct {
 }
 
 type DLQConfig struct {
-	// Disable is a flag to disable DLQ.
+	// Disabled is a flag to disable DLQ.
 	//  - Default is false.
 	//  - If topic is not set, it will be generated from format_dlq_topic.
 	//  - If topic and format_dlq_topic is not set, dlq will be disabled!
-	Disable bool `cfg:"disable"`
+	Disabled bool `cfg:"disabled"`
 	// RetryInterval is a time interval to retry again of DLQ messages.
 	// - Default is 10 seconds.
 	RetryInterval time.Duration `cfg:"retry_interval"`
@@ -158,7 +158,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Meter:            o.Meter,
 		}
 
-		if o.ConsumerConfig.DLQ.Disable {
+		if o.ConsumerConfig.DLQ.Disabled {
 			return nil
 		}
 
@@ -166,7 +166,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Decode:           decode,
 			ProcessDLQ:       dlqProcessBatch(fn),
 			Cfg:              o.ConsumerConfig,
-			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disable),
+			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disabled),
 			IsDLQ:            true,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
@@ -195,7 +195,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Meter:            o.Meter,
 		}
 
-		if o.ConsumerConfig.DLQ.Disable {
+		if o.ConsumerConfig.DLQ.Disabled {
 			return nil
 		}
 
@@ -203,7 +203,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			ProcessDLQ:       fn,
 			Decode:           decode,
 			Cfg:              o.ConsumerConfig,
-			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disable),
+			Skip:             newSkipper(&o.Client.consumerMutex, o.ConsumerConfig.DLQ.Disabled),
 			IsDLQ:            true,
 			Logger:           o.Client.logger,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
@@ -226,7 +226,7 @@ func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Reco
 	}
 
 	var produceDLQ func(ctx context.Context, err *DLQError, records []*kgo.Record) error
-	if !o.ConsumerConfig.DLQ.Disable {
+	if !o.ConsumerConfig.DLQ.Disabled {
 		produceDLQ = producerDLQ(o.ConsumerConfig.DLQ.Topic, o.Client.clientID, o.Client.ProduceRaw)
 	}
 

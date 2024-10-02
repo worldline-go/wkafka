@@ -48,13 +48,13 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 		consumerConfig.GroupID = c.PrefixGroupID + consumerConfig.GroupID
 	}
 
-	if !consumerConfig.DLQ.Disable && consumerConfig.DLQ.Topic == "" && c.FormatDLQTopic == "" {
-		consumerConfig.DLQ.Disable = true
+	if !consumerConfig.DLQ.Disabled && consumerConfig.DLQ.Topic == "" && c.FormatDLQTopic == "" {
+		consumerConfig.DLQ.Disabled = true
 		logger.Warn("dlq is disabled because topic and format_dlq_topic is not set")
 	}
 
 	// add default topic name for DLQ
-	if !consumerConfig.DLQ.Disable {
+	if !consumerConfig.DLQ.Disabled {
 		if consumerConfig.DLQ.Topic == "" {
 			if c.FormatDLQTopic == "" {
 				return fmt.Errorf("format_dlq_topic is required if dlq topic is not set")
@@ -72,7 +72,9 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 				consumerConfig.DLQ.Topic: consumerConfig.DLQ.Skip,
 			}
 		} else {
-			consumerConfig.Skip[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
+			if _, ok := consumerConfig.Skip[consumerConfig.DLQ.Topic]; !ok {
+				consumerConfig.Skip[consumerConfig.DLQ.Topic] = consumerConfig.DLQ.Skip
+			}
 		}
 
 		if consumerConfig.DLQ.RetryInterval == 0 {

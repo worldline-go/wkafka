@@ -54,7 +54,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 			return nil, fmt.Errorf("validate config: %w", err)
 		}
 
-		if !o.ConsumerConfig.DLQ.Disable {
+		if !o.ConsumerConfig.DLQ.Disabled {
 			o.ConsumerDLQEnabled = true
 		}
 	}
@@ -212,7 +212,11 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 
 	// add custom options
 	if isDLQ {
-		kgoOpt = append(kgoOpt, o.KGOOptionsDLQ...)
+		if len(o.KGOOptionsDLQ) > 0 {
+			kgoOpt = append(kgoOpt, o.KGOOptionsDLQ...)
+		} else {
+			kgoOpt = append(kgoOpt, o.KGOOptions...)
+		}
 	} else {
 		kgoOpt = append(kgoOpt, o.KGOOptions...)
 	}

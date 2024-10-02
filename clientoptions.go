@@ -101,6 +101,8 @@ func WithKGOOptions(opts ...kgo.Opt) Option {
 }
 
 // WithKGOOptionsDLQ to set kgo options for DLQ client.
+//
+// If empty than it will use same options as main client.
 func WithKGOOptionsDLQ(opts ...kgo.Opt) Option {
 	return func(o *options) {
 		o.KGOOptionsDLQ = append(o.KGOOptionsDLQ, opts...)
