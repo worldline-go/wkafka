@@ -72,7 +72,7 @@ max_poll_records: 0
 # if this value is more than max_poll_records then max_poll_records will be used
 batch_count: 100
 dlq:
-  disable: false # disable dead letter queue
+  disabled: false # disable dead letter queue
   topic: "" # dead letter topic name, it can be assigned in the kafka config's format_dlq_topic
   retry_interval: "10s" # retry time interval of the message if can't be processed, default is 10s
   start_offset: 0 # -1 to start end of the offsets
@@ -121,6 +121,8 @@ Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the e
 Editing the skip map and use our handler to initialize server mux.
 
 ```go
+// import github.com/worldline-go/wkafka/handler
+
 mux := http.NewServeMux()
 mux.Handle(handler.New(client))
 
