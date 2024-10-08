@@ -27,11 +27,22 @@ message Response {
     string message = 1;
 }
 
-message SkipListResponse {
+message InfoResponse {
     map<string, Topic> skip = 1;
+    DLQMessage dlq = 2;
+}
+
+message DLQMessage {
+    string topic = 1;
+    int32 partition = 2;
+    int64 offset = 3;
+    string key = 4;
+    string value = 5;
+    string timestamp = 6;
+    map<string, string> headers = 7;
 }
 
 service WkafkaService {
 	rpc Skip (CreateSkipRequest) returns (Response);
-    rpc SkipList (google.protobuf.Empty) returns (SkipListResponse);
+    rpc Info (google.protobuf.Empty) returns (InfoResponse);
 }
