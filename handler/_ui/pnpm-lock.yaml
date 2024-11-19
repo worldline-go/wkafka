@@ -7,13 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      immutability-helper:
-        specifier: ^3.1.1
-        version: 3.1.1
-      svelte-spa-router:
-        specifier: ^4.0.1
-        version: 4.0.1
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^3.1.2
@@ -48,6 +41,9 @@ importers:
       gh-pages:
         specifier: ^6.1.1
         version: 6.1.1
+      immutability-helper:
+        specifier: ^3.1.1
+        version: 3.1.1
       postcss:
         specifier: ^8.4.41
         version: 8.4.41
@@ -81,6 +77,9 @@ importers:
       svelte-preprocess:
         specifier: ^6.0.2
         version: 6.0.2(postcss-load-config@5.1.0(jiti@1.21.0)(postcss@8.4.41))(postcss@8.4.41)(sass@1.77.8)(svelte@4.2.18)(typescript@5.5.4)
+      svelte-spa-router:
+        specifier: ^4.0.1
+        version: 4.0.1
       tailwindcss:
         specifier: ^3.4.10
         version: 3.4.10

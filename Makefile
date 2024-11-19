@@ -1,17 +1,12 @@
 .DEFAULT_GOAL := help
 
-.PHONY: generate
-generate: ## Generate gRPC code
-	cd handler/proto && buf generate --path wkafka/wkafka.proto
-	@echo "> Successfully generated gRPC code"
-
 .PHONY: env
 env: ## Start env
-	docker compose -p wkafka -f env/docker-compose.yml up -d
+	docker compose -p wkafka -f env/docker-compose.yml up -d --remove-orphans
 
 .PHONY: env-up
 env-up: ## Start env without detaching
-	docker compose -p wkafka -f env/docker-compose.yml up
+	docker compose -p wkafka -f env/docker-compose.yml up --remove-orphans
 
 .PHONY: env-logs
 env-logs: ## Show env logs
@@ -24,7 +19,7 @@ env-down: ## Stop env
 .PHONY: example
 example: LOG_LEVEL ?= debug
 example: ## Run example
-	LOG_LEVEL=$(LOG_LEVEL) go run ./example/main.go
+	cd example && LOG_LEVEL=$(LOG_LEVEL) go run ./main.go
 
 .PHONY: ci-run
 ci-run: ## Run CI in local with act

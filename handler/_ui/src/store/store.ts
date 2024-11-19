@@ -1,8 +1,9 @@
 import { writable } from "svelte/store";
+import type { Info } from "./model";
 
 let navbar = {
   title: "",
-  sideBarOpen: false
 };
 
 export const storeNavbar = writable(navbar);
+export const storeInfo = writable({} as Info);

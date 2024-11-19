@@ -28,11 +28,15 @@ type Client struct {
 	consumerMutex  sync.RWMutex
 	logger         Logger
 
+	dlqRecord *kgo.Record
+
 	// log purpose
 
+	Trigger []func()
+
 	Brokers   []string
-	dlqTopics []string
-	topics    []string
+	DLQTopics []string
+	Topics    []string
 	Meter     Meter
 }
 
@@ -203,10 +207,10 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			}
 
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(topics...))
-			c.dlqTopics = topics
+			c.DLQTopics = topics
 		} else {
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.Topics...))
-			c.topics = o.ConsumerConfig.Topics
+			c.Topics = o.ConsumerConfig.Topics
 		}
 	}
 
@@ -239,10 +243,6 @@ func (c *Client) Close() {
 	}
 }
 
-func (c *Client) DLQTopics() []string {
-	return c.dlqTopics
-}
-
 // Consume starts consuming messages from kafka and blocks until context is done or an error occurs.
 //   - Only works if client is created with consumer config.
 //   - Just run one time.
@@ -265,9 +265,9 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 
 	// consume main only
 	if c.KafkaDLQ == nil {
-		c.logger.Info("wkafka start consuming", "topics", c.topics)
+		c.logger.Info("wkafka start consuming", "topics", c.Topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
-			return fmt.Errorf("failed to consume: %w", err)
+			return fmt.Errorf("failed to consume %v: %w", c.Topics, err)
 		}
 
 		return nil
@@ -279,18 +279,18 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	ctx = context.WithValue(ctx, KeyIsDLQEnabled, true)
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming", "topics", c.topics)
+		c.logger.Info("wkafka start consuming", "topics", c.Topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
-			return fmt.Errorf("failed to consume: %w", err)
+			return fmt.Errorf("failed to consume %v: %w", c.Topics, err)
 		}
 
 		return nil
 	})
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming DLQ", "topics", c.dlqTopics)
+		c.logger.Info("wkafka start consuming DLQ", "topics", c.DLQTopics)
 		if err := o.ConsumerDLQ.Consume(ctx, c.KafkaDLQ); err != nil {
-			return fmt.Errorf("failed to consume DLQ: %w", err)
+			return fmt.Errorf("failed to consume DLQ %v: %w", c.Topics, err)
 		}
 
 		return nil
@@ -319,6 +319,9 @@ func (c *Client) Admin() *kadm.Client {
 	return kadm.NewClient(c.Kafka)
 }
 
+// Skip for modifying skip configuration in runtime.
+//   - Useful for DLQ topic.
+//   - Don't wait inside the modify function.
 func (c *Client) Skip(modify func(SkipMap) SkipMap) {
 	c.consumerMutex.Lock()
 	defer c.consumerMutex.Unlock()
@@ -329,9 +332,40 @@ func (c *Client) Skip(modify func(SkipMap) SkipMap) {
 
 	c.consumerConfig.Skip = modify(c.consumerConfig.Skip)
 
+	c.callTrigger()
+
 	c.logger.Debug("wkafka skip modified", "skip", c.consumerConfig.Skip)
 }
 
-func (c *Client) GetClientID() []byte {
+// SkipCheck returns skip configuration's deep clone.
+func (c *Client) SkipCheck() SkipMap {
+	c.consumerMutex.RLock()
+	defer c.consumerMutex.RUnlock()
+
+	return cloneSkip(c.consumerConfig.Skip)
+}
+
+func (c *Client) ClientID() []byte {
 	return c.clientID
+}
+
+// SetDLQRecord to set stucked DLQRecord.
+//   - Using in DLQ iteration.
+func (c *Client) setDLQRecord(r *kgo.Record) {
+	c.dlqRecord = r
+
+	c.callTrigger()
+}
+
+// DLQRecord returns stucked DLQRecord if exists.
+func (c *Client) DLQRecord() *kgo.Record {
+	return c.dlqRecord
+}
+
+func (c *Client) callTrigger() {
+	go func() {
+		for _, t := range c.Trigger {
+			t()
+		}
+	}()
 }

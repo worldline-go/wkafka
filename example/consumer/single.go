@@ -7,15 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/grpcreflect"
 	"github.com/rakunlabs/into"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/worldline-go/wkafka"
 	"github.com/worldline-go/wkafka/handler"
-	"github.com/worldline-go/wkafka/handler/gen/wkafka/wkafkaconnect"
 )
 
 var (
@@ -91,17 +87,17 @@ func RunExampleSingleWithHandler(ctx context.Context) error {
 
 	defer client.Close()
 
+	wkafkaHander, err := handler.New(client)
+	if err != nil {
+		return err
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle(handler.New(client, handler.WithLogger(slog.Default())))
-
-	reflector := grpcreflect.NewStaticReflector(wkafkaconnect.WkafkaServiceName)
-
-	mux.Handle(grpcreflect.NewHandlerV1(reflector))
-	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+	mux.Handle(wkafkaHander.Handler())
 
 	s := http.Server{
 		Addr:    ":8080",
-		Handler: h2c.NewHandler(mux, &http2.Server{}),
+		Handler: mux,
 	}
 
 	into.ShutdownAdd(s.Close, "http server")

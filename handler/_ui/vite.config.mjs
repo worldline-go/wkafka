@@ -5,7 +5,7 @@ import { createHtmlPlugin } from "vite-plugin-html";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: "./",
+  base: process.env.NODE_ENV == "production" ? "./" : "/wkafka/ui/",
   plugins: [
     svelte(),
     createHtmlPlugin({
@@ -22,8 +22,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": {
-        target: "http://localhost:5555",
+      "/wkafka/v1": {
+        target: "http://localhost:8080",
         changeOrigin: true,
         secure: true,
         ws: true,

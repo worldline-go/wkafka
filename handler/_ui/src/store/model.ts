@@ -1,17 +1,26 @@
-export interface kafka {
-  topics: string[];
-  dlq: string;
-  messages: kafkaMessage[];
-};
+export interface Info {
+  dlq_topics?: string[];
+  topics?: string[];
+  skip?: Map<string, Map<number, OffsetConfig>>;
+  dlq_record?: DlqRecord;
+}
 
-export interface kafkaMessage {
+export interface OffsetConfig {
+  offsets: number[];
+  before: number;
+}
+
+export interface DlqRecord {
   topic: string;
-  message: any;
-  offset: number;
   partition: number;
+  offset: number;
+  key: string; // base64 encoded
+  value: string; // base64 encoded
+  timestamp: string;
+  headers: Header[];
+}
 
-  headers: {
-    key: string;
-    value: string;
-  }[];
-};
+export interface Header {
+  key: string;
+  value: string; // base64 encoded
+}

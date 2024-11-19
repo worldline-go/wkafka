@@ -10,21 +10,13 @@ import (
 )
 
 type consumerSingle[T any] struct {
+	*customer[T]
+
 	// Process is nil for DLQ consumer.
-	Process func(ctx context.Context, msg T) error
-	// ProcessDLQ is nil for main consumer.
-	ProcessDLQ func(ctx context.Context, msg T) error
-	Cfg        *ConsumerConfig
-	Decode     func(raw []byte, r *kgo.Record) (T, error)
-	// PreCheck is a function that is called before the callback and decode.
-	PreCheck         func(ctx context.Context, r *kgo.Record) error
-	Option           optionConsumer
-	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
-	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
-	Logger           Logger
-	PartitionHandler *partitionHandler
+	Process          func(ctx context.Context, msg T) error
 	IsDLQ            bool
-	Meter            Meter
+	PartitionHandler *partitionHandler
+	DLQProcess       *dlqProcess[T]
 }
 
 func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -73,7 +65,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			// listening DLQ topics
 			// check partition is revoked and not commit it!
 			// when error return than it will not be committed
-			if err := c.iterationDLQ(ctx, r); err != nil {
+			if err := c.DLQProcess.Iteration(ctx, r); err != nil {
 				c.Meter.Meter(start, 1, r.Topic, err, true)
 				if errors.Is(err, errPartitionRevoked) {
 					// don't commit revoked partition
@@ -111,52 +103,10 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 	return nil
 }
 
-// iterationDLQ is used to listen DLQ topics, error usually comes from context cancellation.
-// any kind of error will be retry with interval.
-func (c *consumerSingle[T]) iterationDLQ(ctx context.Context, r *kgo.Record) error {
-	wait := waitRetry{
-		Interval: c.Cfg.DLQ.RetryInterval,
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if c.PartitionHandler.IsRevokedRecord(r) {
-			return errPartitionRevoked
-		}
-
-		if err := c.iterationRecord(ctx, r); err != nil {
-			errOrg, ok := isDQLError(err)
-			var errWrapped error
-			if ok {
-				errWrapped = wrapErr(r, errOrg.Err, c.IsDLQ)
-			} else {
-				errWrapped = wrapErr(r, err, c.IsDLQ)
-			}
-
-			c.Logger.Error("DLQ process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
-
-			if err := wait.Sleep(ctx); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		break
-	}
-
-	return nil
-}
-
 // iterationMain is used to listen main topics.
 func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) error {
 	if err := c.iterationRecord(ctx, r); err != nil {
-		errDLQ, ok := isDQLError(err)
+		errDLQ, ok := IsDQLError(err)
 		if !ok {
 			// it is not DLQ error, return it
 			return err
@@ -204,15 +154,8 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	}
 
 	ctxCallback := context.WithValue(ctx, KeyRecord, r)
-	if c.IsDLQ {
-		ctxCallback = context.WithValue(ctxCallback, KeyIsDLQProcess, true)
-		if err := c.ProcessDLQ(ctxCallback, data); err != nil {
-			return err
-		}
-	} else {
-		if err := c.Process(ctxCallback, data); err != nil {
-			return err
-		}
+	if err := c.Process(ctxCallback, data); err != nil {
+		return err
 	}
 
 	return nil

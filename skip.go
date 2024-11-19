@@ -6,13 +6,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-func newSkipper(c *sync.RWMutex, disable bool) func(cfg *ConsumerConfig, r *kgo.Record) bool {
-	if disable {
-		return func(cfg *ConsumerConfig, r *kgo.Record) bool {
-			return false
-		}
-	}
-
+func newSkipper(c *sync.RWMutex) func(cfg *ConsumerConfig, r *kgo.Record) bool {
 	return func(cfg *ConsumerConfig, r *kgo.Record) bool {
 		c.RLock()
 		defer c.RUnlock()

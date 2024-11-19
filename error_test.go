@@ -121,7 +121,7 @@ func Test_isDQLError(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err, ok := isDQLError(tt.args.err)
+			err, ok := IsDQLError(tt.args.err)
 			if ok != tt.wantOk {
 				t.Errorf("isDQLError() ok = %v, wantOk %v", ok, tt.wantOk)
 				return

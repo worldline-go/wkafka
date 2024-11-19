@@ -40,6 +40,10 @@ func ProcessBatchErr(ctx context.Context, msg []DataBatchErr) error {
 	records := wkafka.CtxRecordBatch(ctx)
 
 	for i, m := range msg {
+		if m.IsErrFatal {
+			return fmt.Errorf("test fatal error %d", m.Test)
+		}
+
 		if m.IsErr {
 			// if DLQ process, return the error
 			if wkafka.CtxIsDLQProcess(ctx) {
@@ -74,6 +78,7 @@ func RunExampleBatchErr(ctx context.Context) error {
 		ctx, kafkaConfigBatchErr,
 		wkafka.WithConsumer(consumeConfigBatchErr),
 		wkafka.WithClientInfo("testappbatch", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
 	)
 	if err != nil {
 		return err

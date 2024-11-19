@@ -45,8 +45,8 @@ func (e *DLQError) Error() string {
 	return "DLQ indexed error"
 }
 
-// isDQLError check if error is DLQ error and return it.
-func isDQLError(err error) (*DLQError, bool) {
+// IsDQLError check if error is DLQ error and return it.
+func IsDQLError(err error) (*DLQError, bool) {
 	var errDLQIndexed *DLQError
 
 	ok := errors.As(err, &errDLQIndexed)

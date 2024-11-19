@@ -6,15 +6,18 @@ import (
 	"time"
 )
 
-var DefaultRetryInterval = 10 * time.Second
+var (
+	DefaultRetryInterval    = 10 * time.Second
+	DefaultRetryMaxInterval = 15 * time.Minute
+)
 
 type Config struct {
 	// Brokers is a list of kafka brokers to connect to.
 	// Not all brokers need to be specified, the list is so that
 	// if one broker is unavailable, another can be used.
 	// Required at least one broker. Example value is 'localhost:9092'.
-	Brokers  []string       `cfg:"brokers"`
-	Security SecurityConfig `cfg:"security"`
+	Brokers  []string       `cfg:"brokers"  json:"brokers"`
+	Security SecurityConfig `cfg:"security" json:"security"`
 	// Compressions is chosen in the order preferred based on broker support.
 	// The default is to use no compression.
 	//  Available:
@@ -22,24 +25,24 @@ type Config struct {
 	//  - snappy
 	//  - lz4
 	//  - zstd
-	Compressions []string `cfg:"compressions"`
+	Compressions []string `cfg:"compressions" json:"compressions"`
 
 	// Consumer is a pre configuration for consumer and validation.
-	Consumer ConsumerPreConfig `cfg:"consumer"`
+	Consumer ConsumerPreConfig `cfg:"consumer" json:"consumer"`
 }
 
 type ConsumerPreConfig struct {
 	// PrefixGroupID add prefix to group_id.
-	PrefixGroupID string `cfg:"prefix_group_id"`
+	PrefixGroupID string `cfg:"prefix_group_id" json:"prefix_group_id"`
 	// FormatDLQTopic is a format string to generate DLQ topic name.
 	//  - Example is "finops_{{.AppName}}_dlq"
 	//  - It should be exist if DLQ is enabled and topic is not set.
 	//
 	//  - Available variables:
 	//    - AppName
-	FormatDLQTopic string `cfg:"format_dlq_topic"`
+	FormatDLQTopic string `cfg:"format_dlq_topic" json:"format_dlq_topic"`
 	// Validation is a configuration for validation when consumer initialized.
-	Validation Validation `cfg:"validation"`
+	Validation Validation `cfg:"validation" json:"validation"`
 }
 
 // configApply configuration to ConsumerConfig and check validation.
@@ -80,6 +83,10 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 		if consumerConfig.DLQ.RetryInterval == 0 {
 			consumerConfig.DLQ.RetryInterval = DefaultRetryInterval
 		}
+
+		if consumerConfig.DLQ.RetryMaxInterval == 0 {
+			consumerConfig.DLQ.RetryMaxInterval = DefaultRetryMaxInterval
+		}
 	}
 
 	if err := c.Validation.Validate(consumerConfig); err != nil {
@@ -91,14 +98,14 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 
 // Validation is a configuration for validation when consumer initialized.
 type Validation struct {
-	GroupID GroupIDValidation `cfg:"group_id"`
+	GroupID GroupIDValidation `cfg:"group_id" json:"group_id"`
 }
 
 // GroupIDValidation is a configuration for group_id validation.
 type GroupIDValidation struct {
-	Enabled bool `cfg:"enabled"`
+	Enabled bool `cfg:"enabled" json:"enabled"`
 	// RgxGroupID is a regex pattern to validate RgxGroupID.
-	RgxGroupID string `cfg:"rgx_group_id"`
+	RgxGroupID string `cfg:"rgx_group_id" json:"rgx_group_id"`
 }
 
 func (v GroupIDValidation) Validate(groupID string) error {

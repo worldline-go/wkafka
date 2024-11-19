@@ -108,7 +108,7 @@ func Test_skip(t *testing.T) {
 	var cfgMutex sync.RWMutex
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newSkipper(&cfgMutex, false)(tt.args.cfg, tt.args.r); got != tt.want {
+			if got := newSkipper(&cfgMutex)(tt.args.cfg, tt.args.r); got != tt.want {
 				t.Errorf("skip() = %v, want %v", got, tt.want)
 			}
 		})

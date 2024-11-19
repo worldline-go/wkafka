@@ -10,21 +10,13 @@ import (
 )
 
 type consumerBatch[T any] struct {
+	*customer[T]
+
 	// Process is nil for DLQ consumer.
-	Process func(ctx context.Context, msg []T) error
-	// ProcessDLQ is nil for main consumer.
-	ProcessDLQ func(ctx context.Context, msg T) error
-	Cfg        *ConsumerConfig
-	Decode     func(raw []byte, r *kgo.Record) (T, error)
-	// PreCheck is a function that is called before the callback and decode.
-	PreCheck         func(ctx context.Context, r *kgo.Record) error
-	Option           optionConsumer
-	ProduceDLQ       func(ctx context.Context, err *DLQError, records []*kgo.Record) error
-	Skip             func(cfg *ConsumerConfig, r *kgo.Record) bool
-	Logger           Logger
-	PartitionHandler *partitionHandler
+	Process          func(ctx context.Context, msg []T) error
 	IsDLQ            bool
-	Meter            Meter
+	PartitionHandler *partitionHandler
+	DLQProcess       *dlqProcess[T]
 }
 
 func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Record) error) {
@@ -134,7 +126,7 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 		start := time.Now()
 		if err := c.Process(ctxCallback, batch); err != nil {
 			c.Meter.Meter(start, int64(len(batch)), r.Topic, err, false)
-			errOrg, ok := isDQLError(err)
+			errOrg, ok := IsDQLError(err)
 			if !ok {
 				// it is not DLQ error, return it
 				// this will fail the service
@@ -183,7 +175,7 @@ func (c *consumerBatch[T]) batchIterationDLQ(ctx context.Context, cl *kgo.Client
 		// listening DLQ topics
 		// check partition is revoked and not commit it!
 		// when error return than it will not be committed
-		if err := c.iterationDLQ(ctx, r); err != nil {
+		if err := c.DLQProcess.Iteration(ctx, r); err != nil {
 			if errors.Is(err, errPartitionRevoked) {
 				// don't commit revoked partition
 				// above check also skip others on that partition
@@ -197,83 +189,6 @@ func (c *consumerBatch[T]) batchIterationDLQ(ctx context.Context, cl *kgo.Client
 		if err := cl.CommitRecords(ctx, r); err != nil {
 			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), c.IsDLQ)
 		}
-	}
-
-	return nil
-}
-
-// iterationDLQ is used to listen DLQ topics, error usually comes from context cancellation.
-// any kind of error will be retry with interval.
-func (c *consumerBatch[T]) iterationDLQ(ctx context.Context, r *kgo.Record) error {
-	wait := waitRetry{
-		Interval: c.Cfg.DLQ.RetryInterval,
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if c.PartitionHandler.IsRevokedRecord(r) {
-			return errPartitionRevoked
-		}
-
-		if err := c.iterationRecordDLQ(ctx, r); err != nil {
-			errOrg, ok := isDQLError(err)
-			var errWrapped error
-			if ok {
-				errWrapped = wrapErr(r, errOrg.Err, c.IsDLQ)
-			} else {
-				errWrapped = wrapErr(r, err, c.IsDLQ)
-			}
-
-			c.Logger.Error("DLQ process failed", "err", errWrapped, "retry_interval", wait.CurrentInterval().String())
-
-			if err := wait.Sleep(ctx); err != nil {
-				return err
-			}
-
-			continue
-		}
-
-		break
-	}
-
-	return nil
-}
-
-func (c *consumerBatch[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) error {
-	if c.Skip(c.Cfg, r) {
-		c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
-
-		return nil
-	}
-
-	if c.PreCheck != nil {
-		if err := c.PreCheck(ctx, r); err != nil {
-			if errors.Is(err, ErrSkip) {
-				return nil
-			}
-
-			return fmt.Errorf("pre check failed: %w", err)
-		}
-	}
-
-	data, err := c.Decode(r.Value, r)
-	if err != nil {
-		if errors.Is(err, ErrSkip) {
-			return nil
-		}
-
-		return fmt.Errorf("decode record failed: %w", err)
-	}
-
-	ctxCallback := context.WithValue(ctx, KeyRecord, r)
-	ctxCallback = context.WithValue(ctxCallback, KeyIsDLQProcess, true)
-	if err := c.ProcessDLQ(ctxCallback, data); err != nil {
-		return err
 	}
 
 	return nil

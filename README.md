@@ -75,6 +75,7 @@ dlq:
   disabled: false # disable dead letter queue
   topic: "" # dead letter topic name, it can be assigned in the kafka config's format_dlq_topic
   retry_interval: "10s" # retry time interval of the message if can't be processed, default is 10s
+  retry_max_interval: "15m" # max interval for exponential time duration limit, default is 15m
   start_offset: 0 # -1 to start end of the offsets
   skip: # same as skip but just for dead letter topic and not need to specify topic name
     # example skip offset
