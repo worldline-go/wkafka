@@ -42,8 +42,9 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 					"finops_serviceX_dlq": nil,
 				},
 				DLQ: DLQConfig{
-					Topic:         "finops_serviceX_dlq",
-					RetryInterval: DefaultRetryInterval,
+					Topic:            "finops_serviceX_dlq",
+					RetryInterval:    DefaultRetryInterval,
+					RetryMaxInterval: DefaultRetryMaxInterval,
 				},
 			},
 		},
