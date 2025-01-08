@@ -17,12 +17,8 @@
   });
 </script>
 
-<!-- <div class="flex w-full h-full justify-center align-middle">
-  <span class="text-2xl self-center">Welcome!</span>
-</div> -->
-
 <div>
   <span class="block">Listening topics {$storeInfo.topics}</span>
   <span class="block">Listening DLQ topics {$storeInfo.dlq_topics}</span>
-  <Skip skip={$storeInfo.skip} />
+  <!-- <Skip skip={$storeInfo.skip} /> -->
 </div>

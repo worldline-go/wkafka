@@ -23,3 +23,7 @@ services:
     environment:
       - KAFKA_BROKERS=kafka:9094
       - SERVER_LISTENPORT=7071
+  pubsub:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    ports:
+      - "6379:6379"

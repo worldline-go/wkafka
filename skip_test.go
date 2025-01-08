@@ -67,7 +67,7 @@ func Test_skip(t *testing.T) {
 					Skip: map[string]map[int32]OffsetConfig{
 						"topic": {
 							0: {
-								Before: 5,
+								Before: ToPtr(int64(5)),
 							},
 						},
 					},
@@ -81,13 +81,33 @@ func Test_skip(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "skip topic before zero",
+			args: args{
+				cfg: &ConsumerConfig{
+					Skip: map[string]map[int32]OffsetConfig{
+						"topic": {
+							0: {
+								Before: ToPtr(int64(0)),
+							},
+						},
+					},
+				},
+				r: &kgo.Record{
+					Topic:     "topic",
+					Partition: 0,
+					Offset:    0,
+				},
+			},
+			want: true,
+		},
+		{
 			name: "topic before",
 			args: args{
 				cfg: &ConsumerConfig{
 					Skip: map[string]map[int32]OffsetConfig{
 						"topic": {
 							0: {
-								Before: 5,
+								Before: ToPtr(int64(5)),
 								Offsets: []int64{
 									9,
 									10,
@@ -138,7 +158,7 @@ func TestSkipAppend(t *testing.T) {
 				base: map[string]map[int32]OffsetConfig{
 					"topic2": {
 						0: {
-							Before:  10,
+							Before:  ToPtr(int64(10)),
 							Offsets: []int64{1, 2, 3},
 						},
 					},
@@ -151,13 +171,13 @@ func TestSkipAppend(t *testing.T) {
 				skip: map[string]map[int32]OffsetConfig{
 					"topic2": {
 						1: {
-							Before:  5,
+							Before:  ToPtr(int64(5)),
 							Offsets: []int64{9, 10},
 						},
 					},
 					"topic": {
 						0: {
-							Before: 5,
+							Before: ToPtr(int64(5)),
 							Offsets: []int64{
 								9,
 								10,
@@ -169,17 +189,17 @@ func TestSkipAppend(t *testing.T) {
 			want: map[string]map[int32]OffsetConfig{
 				"topic2": {
 					0: {
-						Before:  10,
+						Before:  ToPtr(int64(10)),
 						Offsets: []int64{1, 2, 3},
 					},
 					1: {
-						Before:  5,
+						Before:  ToPtr(int64(5)),
 						Offsets: []int64{9, 10},
 					},
 				},
 				"topic": {
 					0: {
-						Before: 5,
+						Before: ToPtr(int64(5)),
 						Offsets: []int64{
 							11,
 							9,

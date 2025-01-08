@@ -49,8 +49,7 @@ func (e *DLQError) Error() string {
 func IsDQLError(err error) (*DLQError, bool) {
 	var errDLQIndexed *DLQError
 
-	ok := errors.As(err, &errDLQIndexed)
-	if ok {
+	if errors.As(err, &errDLQIndexed) {
 		return errDLQIndexed, true
 	}
 

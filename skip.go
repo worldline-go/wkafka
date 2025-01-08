@@ -6,6 +6,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+func ToPtr[T any](v T) *T {
+	return &v
+}
+
 func newSkipper(c *sync.RWMutex) func(cfg *ConsumerConfig, r *kgo.Record) bool {
 	return func(cfg *ConsumerConfig, r *kgo.Record) bool {
 		c.RLock()
@@ -30,7 +34,7 @@ func skipCheck(skip map[string]map[int32]OffsetConfig, r *kgo.Record) bool {
 		return false
 	}
 
-	if offsets.Before > 0 && r.Offset <= offsets.Before {
+	if offsets.Before != nil && r.Offset <= *offsets.Before {
 		return true
 	}
 

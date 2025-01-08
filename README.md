@@ -126,11 +126,6 @@ Editing the skip map and use our handler to initialize server mux.
 
 mux := http.NewServeMux()
 mux.Handle(handler.New(client))
-
-reflector := grpcreflect.NewStaticReflector(wkafkaconnect.WkafkaServiceName)
-
-mux.Handle(grpcreflect.NewHandlerV1(reflector))
-mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
 ```
 
 <details><summary>Handler Example</summary>
@@ -143,8 +138,6 @@ EXAMPLE=consumer_single_handler make example
 ```
 
 Add messages in here to skip the message http://localhost:7071
-
-Go to this side for grpcUI http://localhost:8082/#/grpc/wkafka
 
 </details>
 
@@ -172,6 +165,60 @@ if err != nil {
 }
 
 return producer.Produce(ctx, data)
+```
+
+### Telemetry
+
+```sh
+go get github.com/twmb/franz-go/plugin/kotel
+```
+
+Use that with initializing the kafka client.
+
+```go
+kafkaTracer := kotel.NewTracer()
+
+kafkaClient, err = wkafka.New(ctx,
+  config.Application.KafkaConfig,
+  wkafka.WithConsumer(config.Application.KafkaConsumer),
+  wkafka.WithClientInfo(config.ServiceName, config.ServiceVersion),
+  wkafka.WithKGOOptions(kgo.WithHooks(kotel.NewKotel(kotel.WithTracer(kafkaTracer)).Hooks()...)),
+)
+```
+
+#### Telemetry on Produce Message
+
+Important to have span kind as producer.
+
+```go
+ctx, spanKafka := otel.Tracer("").Start(ctx, "produce_message", trace.WithSpanKind(trace.SpanKindProducer))
+defer spanKafka.End()
+
+if err := h.KafkaProducer.Produce(ctx, product); err != nil {
+    spanKafka.SetStatus(codes.Error, err.Error())
+
+    return c.JSON(http.StatusBadRequest, model.Message{
+        Message: err.Error(),
+    })
+}
+```
+
+#### Telemetry on Consume Message
+
+`k.Tracer` is we initialized on kafka client (`kotel.NewTracer()`).
+
+```go
+func (k *Kafka) Consume(ctx context.Context, product model.Product) error {
+	// use tracer's returned ctx for next spans
+	ctx, span := k.Tracer.WithProcessSpan(wkafka.CtxRecord(ctx))
+	defer span.End()
+
+	span.SetAttributes(attribute.String("product.name", product.Name))
+
+	log.Info().Str("product", product.Name).Str("description", product.Description).Msg("consume message")
+
+	return nil
+}
 ```
 
 ## Development

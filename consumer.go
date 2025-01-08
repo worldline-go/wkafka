@@ -93,7 +93,7 @@ type OffsetConfig struct {
 	// In other words, before is 10, the listener skips all offsets that
 	// are <= 10, so offsets 1, 2, 3, 4, 5, 6, 7, 8, 9 and 10 will be skipped
 	// but not 11, 12, 13, ...
-	Before int64 `cfg:"before" json:"before"`
+	Before *int64 `cfg:"before" json:"before"`
 }
 
 type customer[T any] struct {

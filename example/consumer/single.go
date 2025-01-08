@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
-	"github.com/rakunlabs/into"
-	"golang.org/x/sync/errgroup"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/plugin/kotel"
 
 	"github.com/worldline-go/wkafka"
 	"github.com/worldline-go/wkafka/handler"
@@ -19,6 +18,18 @@ var (
 		Brokers: []string{"localhost:9092"},
 		Consumer: wkafka.ConsumerPreConfig{
 			FormatDLQTopic: "finops_{{.AppName}}_dlq",
+		},
+		Plugin: map[string]interface{}{
+			handler.PluginName: map[string]interface{}{
+				"enabled": true,
+				"addr":    ":8080",
+				"pubsub": map[string]interface{}{
+					"prefix": "finops_",
+					"redis": map[string]interface{}{
+						"address": "localhost:6379",
+					},
+				},
+			},
 		},
 	}
 	consumeConfigSingle = wkafka.ConsumerConfig{
@@ -55,11 +66,24 @@ func ProcessSingle(_ context.Context, msg DataSingle) error {
 	return nil
 }
 
+func ProcessSingleWithTrace(tracer *kotel.Tracer) func(ctx context.Context, msg DataSingle) error {
+	return func(ctx context.Context, msg DataSingle) error {
+		ctx, span := tracer.WithProcessSpan(wkafka.CtxRecord(ctx))
+		defer span.End()
+
+		v, ok := ctx.Value("my-value").(string)
+		slog.Info("my-value", slog.String("value", v), slog.Bool("ok", ok), slog.String("ctx", fmt.Sprintf("%s", ctx)))
+
+		return ProcessSingle(ctx, msg)
+	}
+}
+
 func RunExampleSingle(ctx context.Context) error {
 	client, err := wkafka.New(
 		ctx, kafkaConfigSingle,
 		wkafka.WithConsumer(consumeConfigSingle),
 		wkafka.WithClientInfo("testapp", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
 	)
 	if err != nil {
 		return err
@@ -74,11 +98,14 @@ func RunExampleSingle(ctx context.Context) error {
 	return nil
 }
 
-func RunExampleSingleWithHandler(ctx context.Context) error {
+func RunExampleSingleWithTrace(ctx context.Context) error {
+	kafkaTracer := kotel.NewTracer()
+
 	client, err := wkafka.New(
 		ctx, kafkaConfigSingle,
 		wkafka.WithConsumer(consumeConfigSingle),
 		wkafka.WithClientInfo("testapp", "v0.1.0"),
+		wkafka.WithKGOOptions(kgo.WithHooks(kotel.NewKotel(kotel.WithTracer(kafkaTracer)).Hooks()...)),
 		wkafka.WithLogger(slog.Default()),
 	)
 	if err != nil {
@@ -87,37 +114,28 @@ func RunExampleSingleWithHandler(ctx context.Context) error {
 
 	defer client.Close()
 
-	wkafkaHander, err := handler.New(client)
+	ctx = context.WithValue(ctx, "my-value", "test")
+
+	if err := client.Consume(ctx, wkafka.WithCallback(ProcessSingleWithTrace(kafkaTracer))); err != nil {
+		return fmt.Errorf("consume: %w", err)
+	}
+
+	return nil
+}
+
+func RunExampleSingleWithHandler(ctx context.Context) error {
+	client, err := wkafka.New(
+		ctx, kafkaConfigSingle,
+		wkafka.WithConsumer(consumeConfigSingle),
+		wkafka.WithClientInfo("testapp", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+		wkafka.WithPlugin(handler.PluginWithName()),
+	)
 	if err != nil {
 		return err
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle(wkafkaHander.Handler())
+	defer client.Close()
 
-	s := http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
-
-	into.ShutdownAdd(s.Close, "http server")
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		slog.Info("started listening on :8080")
-
-		go func() {
-			<-ctx.Done()
-			s.Close()
-		}()
-
-		return s.ListenAndServe()
-	})
-
-	g.Go(func() error {
-		return client.Consume(ctx, wkafka.WithCallback(ProcessSingle))
-	})
-
-	return g.Wait()
+	return client.Consume(ctx, wkafka.WithCallback(ProcessSingle))
 }

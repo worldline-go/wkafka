@@ -9,23 +9,23 @@ import (
 // SecurityConfig contains options for TLS and SASL authentication.
 // Zero value is used if the kafka instance has a plaintext listener.
 type SecurityConfig struct {
-	TLS  TLSConfig   `cfg:"tls"`
-	SASL SaslConfigs `cfg:"sasl"`
+	TLS  TLSConfig   `cfg:"tls"  json:"tls"`
+	SASL SaslConfigs `cfg:"sasl" json:"sasl"`
 }
 
 // TLSConfig contains options for TLS authentication.
 type TLSConfig struct {
 	// Enabled is whether TLS is enabled.
-	Enabled bool `cfg:"enabled"`
+	Enabled bool `cfg:"enabled" json:"enabled"`
 	// CertFile is the path to the client's TLS certificate.
 	// Should be use with KeyFile.
-	CertFile string `cfg:"cert_file"`
+	CertFile string `cfg:"cert_file" json:"cert_file"`
 	// KeyFile is the path to the client's TLS key.
 	// Should be use with CertFile.
-	KeyFile string `cfg:"key_file"`
+	KeyFile string `cfg:"key_file" json:"key_file"`
 	// CAFile is the path to the CA certificate.
 	// If empty, the server's root CA set will be used.
-	CAFile string `cfg:"ca_file"`
+	CAFile string `cfg:"ca_file" json:"ca_file"`
 }
 
 // Generate returns a tls.Config based on the TLSConfig.

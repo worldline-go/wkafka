@@ -29,6 +29,9 @@ type Config struct {
 
 	// Consumer is a pre configuration for consumer and validation.
 	Consumer ConsumerPreConfig `cfg:"consumer" json:"consumer"`
+
+	// Plugin add custom plugins to the client like handler.
+	Plugin map[string]interface{} `cfg:"plugin" json:"plugin"`
 }
 
 type ConsumerPreConfig struct {

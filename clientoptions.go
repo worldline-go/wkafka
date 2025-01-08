@@ -34,6 +34,8 @@ type options struct {
 	Ping        bool
 	PingRetry   bool
 	PingBackoff backoff.BackOff
+
+	Plugin plugin
 }
 
 func (o *options) apply(opts ...Option) {
@@ -121,18 +123,10 @@ func WithConsumer(cfg ConsumerConfig) Option {
 // WithLogger configures the client to use the provided logger.
 //   - For zerolog logz.AdapterKV{Log: logger} can usable.
 //   - Default is using zerolog's global logger.
+//   - Set nil to disable logging.
 func WithLogger(logger Logger) Option {
 	return func(o *options) {
 		o.Logger = logger
-	}
-}
-
-// WithNoLogger to disable logger.
-func WithNoLogger(v bool) Option {
-	return func(o *options) {
-		if v {
-			o.Logger = LogNoop{}
-		}
 	}
 }
 
@@ -154,5 +148,11 @@ func WithPingRetry(v bool) Option {
 func WithPingBackoff(b backoff.BackOff) Option {
 	return func(o *options) {
 		o.PingBackoff = b
+	}
+}
+
+func WithPlugin(name string, fn PluginFunc) Option {
+	return func(o *options) {
+		o.Plugin.Add(name, fn)
 	}
 }

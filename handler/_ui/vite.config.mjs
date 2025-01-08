@@ -29,6 +29,13 @@ export default defineConfig({
         ws: true,
         followRedirects: true,
       },
+      "/wkafka/files": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: true,
+        ws: true,
+        followRedirects: true,
+      },
     },
     port: process.env.PORT ?? 3000,
   },

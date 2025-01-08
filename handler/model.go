@@ -1,14 +1,16 @@
 package handler
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/worldline-go/wkafka"
 )
 
-type SkipRequest struct {
-	Skip map[string]map[int32]wkafka.OffsetConfig `json:"skip"`
-}
+type (
+	SkipRequest    map[string]map[int32]wkafka.OffsetConfig
+	SkipDLQRequest map[int32]wkafka.OffsetConfig
+)
 
 type Response struct {
 	Message string `json:"message"`
@@ -34,6 +36,16 @@ type DLQRecord struct {
 type Header struct {
 	Key   string `json:"key"`
 	Value []byte `json:"value"`
+}
+
+type PubSubModel struct {
+	Type  string          `json:"type"`
+	Value json.RawMessage `json:"value"`
+}
+
+type PubSubModelPublish struct {
+	Type  string      `json:"type"`
+	Value interface{} `json:"value"`
 }
 
 func dlqRecord(r *wkafka.Record) *DLQRecord {

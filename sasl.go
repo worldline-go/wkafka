@@ -33,8 +33,8 @@ func (c SaslConfigs) Generate() ([]sasl.Mechanism, error) {
 }
 
 type SalsConfig struct {
-	Plain SaslPlain `cfg:"plain"`
-	SCRAM SaslSCRAM `cfg:"scram"`
+	Plain SaslPlain `cfg:"plain" json:"plain"`
+	SCRAM SaslSCRAM `cfg:"scram" json:"scram"`
 }
 
 func (c SalsConfig) Generate() (sasl.Mechanism, error) {
@@ -52,13 +52,13 @@ func (c SalsConfig) Generate() (sasl.Mechanism, error) {
 // SaslPlain contains options for SASL/SCRAM authentication.
 type SaslPlain struct {
 	// Enabled this config.
-	Enabled bool `cfg:"enabled"`
+	Enabled bool `cfg:"enabled" json:"enabled"`
 	// Zid is an optional authorization ID to use in authenticating.
-	Zid string `cfg:"zid"`
+	Zid string `cfg:"zid" json:"zid"`
 	// User is the SASL username.
-	User string `cfg:"user"`
+	User string `cfg:"user" json:"user"`
 	// Pass is the SASL password.
-	Pass string `cfg:"pass" log:"false"`
+	Pass string `cfg:"pass" json:"pass" log:"false"`
 }
 
 func (s SaslPlain) Generate() (sasl.Mechanism, error) {
@@ -76,21 +76,21 @@ func (s SaslPlain) Generate() (sasl.Mechanism, error) {
 
 type SaslSCRAM struct {
 	// Enabled this config.
-	Enabled bool `cfg:"enabled"`
+	Enabled bool `cfg:"enabled" json:"enabled"`
 	// Algorithm valid values are "SCRAM-SHA-256" and "SCRAM-SHA-512".
 	// Empty is plain SASL.
-	Algorithm string `cfg:"algorithm"`
+	Algorithm string `cfg:"algorithm" json:"algorithm"`
 	// Zid is an optional authorization ID to use in authenticating.
-	Zid string `cfg:"zid"`
+	Zid string `cfg:"zid" json:"zid"`
 	// Username is the SASL username.
-	User string `cfg:"user"`
+	User string `cfg:"user" json:"user"`
 	// Pass is the SASL password.
-	Pass string `cfg:"pass" log:"false"`
+	Pass string `cfg:"pass" json:"pass" log:"false"`
 	// IsToken, if true, suffixes the "tokenauth=true" extra attribute to
 	// the initial authentication message.
 	//
 	// Set this to true if the user and pass are from a delegation token.
-	IsToken bool `cfg:"is_token"`
+	IsToken bool `cfg:"is_token" json:"is_token"`
 }
 
 func (s SaslSCRAM) Generate() (sasl.Mechanism, error) {

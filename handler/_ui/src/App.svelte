@@ -1,10 +1,21 @@
 <script lang="ts">
+  import type { ComponentType } from "svelte";
   import { onMount } from "svelte";
+  import Router from "svelte-spa-router";
 
-  import Toast from "./components/Toast.svelte";
   import MainPage from "@/pages/Main.svelte";
+  import Swagger from "@/pages/Swagger.svelte";
+  import NotFound from "@/pages/NotFound.svelte";
+
+  import Toast from "@/components/Toast.svelte";
+  import Navbar from "@/components/Navbar.svelte";
 
   let mounted = false;
+
+  const routes = new Map<string | RegExp, ComponentType>();
+  routes.set("/swagger", Swagger);
+  routes.set("/", MainPage);
+  routes.set("/*", NotFound);
 
   onMount(async () => {
     mounted = true;
@@ -21,6 +32,9 @@
       ></div>
     </div>
   {:else}
-    <MainPage />
+    <div class="h-full w-full grid grid-rows-[1.75rem]">
+      <Navbar />
+      <Router {routes} />
+    </div>
   {/if}
 </div>

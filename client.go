@@ -29,10 +29,11 @@ type Client struct {
 	logger         Logger
 
 	dlqRecord *kgo.Record
+	hook      *hooker
+	cancel    context.CancelFunc
+	Trigger   []func()
 
 	// log purpose
-
-	Trigger []func()
 
 	Brokers   []string
 	DLQTopics []string
@@ -51,6 +52,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	o.apply(opts...)
+
+	if o.Logger == nil {
+		o.Logger = LogNoop{}
+	}
 
 	// validate client and add defaults to consumer config
 	if o.ConsumerConfig != nil {
@@ -72,6 +77,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		logger:         o.Logger,
 		clientID:       []byte(o.ClientID),
 		Meter:          o.Meter,
+		hook:           &hooker{},
 	}
 
 	kgoClient, err := newClient(c, cfg, &o, false)
@@ -118,6 +124,15 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	c.Brokers = cfg.Brokers
+
+	ctx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+
+	for name, p := range o.Plugin.holder {
+		if err := p(ctx, c, cfg.Plugin[name]); err != nil {
+			return nil, fmt.Errorf("plugin %s: %w", name, err)
+		}
+	}
 
 	return c, nil
 }
@@ -198,6 +213,7 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			kgo.ConsumeResetOffset(startOffset),
 			kgo.OnPartitionsLost(partitionLost(partitionH)),
 			kgo.OnPartitionsRevoked(partitionRevoked(partitionH)),
+			kgo.WithHooks(c.hook),
 		)
 
 		if isDLQ {
@@ -241,6 +257,18 @@ func (c *Client) Close() {
 	if c.KafkaDLQ != nil {
 		c.KafkaDLQ.Close()
 	}
+
+	// cancel for plugins
+	c.cancel()
+}
+
+// GroupID returns the consumer group id.
+func (c *Client) GroupID() string {
+	if c.consumerConfig == nil {
+		return ""
+	}
+
+	return c.consumerConfig.GroupID
 }
 
 // Consume starts consuming messages from kafka and blocks until context is done or an error occurs.
@@ -265,6 +293,8 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 
 	// consume main only
 	if c.KafkaDLQ == nil {
+		c.hook.setCtx(ctx)
+
 		c.logger.Info("wkafka start consuming", "topics", c.Topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume %v: %w", c.Topics, err)
@@ -277,6 +307,8 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	g, ctx := errgroup.WithContext(ctx)
 
 	ctx = context.WithValue(ctx, KeyIsDLQEnabled, true)
+
+	c.hook.setCtx(ctx)
 
 	g.Go(func() error {
 		c.logger.Info("wkafka start consuming", "topics", c.Topics)
@@ -368,4 +400,8 @@ func (c *Client) callTrigger() {
 			t()
 		}
 	}()
+}
+
+func (c *Client) GetLogger() Logger {
+	return c.logger
 }

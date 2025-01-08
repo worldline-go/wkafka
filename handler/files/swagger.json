@@ -1,0 +1,246 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Kafka library",
+        "title": "wkafka API",
+        "contact": {}
+    },
+    "basePath": "/wkafka/",
+    "paths": {
+        "/v1/info": {
+            "get": {
+                "tags": [
+                    "wkafka"
+                ],
+                "summary": "Get the current information of the client.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.InfoResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/skip": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wkafka"
+                ],
+                "summary": "Set the skip.",
+                "parameters": [
+                    {
+                        "description": "skip",
+                        "name": "skip",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.SkipRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wkafka"
+                ],
+                "summary": "Patch the skip.",
+                "parameters": [
+                    {
+                        "description": "skip",
+                        "name": "skip",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.SkipRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/skip-dlq": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wkafka"
+                ],
+                "summary": "Skip on DLQ topic.",
+                "parameters": [
+                    {
+                        "description": "skip",
+                        "name": "skip",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.SkipDLQRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "handler.DLQRecord": {
+            "type": "object",
+            "properties": {
+                "headers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handler.Header"
+                    }
+                },
+                "key": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "partition": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "handler.Header": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "handler.InfoResponse": {
+            "type": "object",
+            "properties": {
+                "dlq_record": {
+                    "$ref": "#/definitions/handler.DLQRecord"
+                },
+                "dlq_topics": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skip": {
+                    "$ref": "#/definitions/wkafka.SkipMap"
+                },
+                "topics": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "handler.Response": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.SkipDLQRequest": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/wkafka.OffsetConfig"
+            }
+        },
+        "handler.SkipRequest": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                    "$ref": "#/definitions/wkafka.OffsetConfig"
+                }
+            }
+        },
+        "wkafka.OffsetConfig": {
+            "type": "object",
+            "properties": {
+                "before": {
+                    "description": "Before skips all offsets before or equal to this offset.\nIn other words, before is 10, the listener skips all offsets that\nare \u003c= 10, so offsets 1, 2, 3, 4, 5, 6, 7, 8, 9 and 10 will be skipped\nbut not 11, 12, 13, ...",
+                    "type": "integer"
+                },
+                "offsets": {
+                    "description": "Offsets is a list of offsets numbers in that partition to skip.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "wkafka.SkipMap": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                    "$ref": "#/definitions/wkafka.OffsetConfig"
+                }
+            }
+        }
+    }
+}

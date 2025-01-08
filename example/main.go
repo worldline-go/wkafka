@@ -23,6 +23,7 @@ var examples = map[string]func(context.Context) error{
 	"consumer_single":         consumer.RunExampleSingle,
 	"consumer_single_handler": consumer.RunExampleSingleWithHandler,
 	"consumer_single_byte":    consumer.RunExampleSingleByte,
+	"consumer_single_trace":   consumer.RunExampleSingleWithTrace,
 	"producer_hook":           producer.RunExampleHook,
 }
 
