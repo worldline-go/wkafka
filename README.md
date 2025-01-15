@@ -45,6 +45,9 @@ consumer: # consumer validation and default values
     group_id: # validate group id
       enabled: false
       rgx_group_id: "" # regex to validate group id ex: "^finops_.*$"
+plugins: # additional configuration for plugins
+  plugin_name: # plugin name
+    key: value # plugin's key value configuration
 ```
 
 ### Consumer
@@ -121,12 +124,16 @@ Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the e
 
 Editing the skip map and use our handler to initialize server mux.
 
+> `Redis` need for request goes to other instances.
+
 ```go
 // import github.com/worldline-go/wkafka/handler
 
 mux := http.NewServeMux()
-mux.Handle(handler.New(client))
+mux.Handle(handler.New(ctx, client))
 ```
+
+It will serve default on `/wkafka/ui` path.
 
 <details><summary>Handler Example</summary>
 
