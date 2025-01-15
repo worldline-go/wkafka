@@ -22,16 +22,16 @@ type PubSubConfig struct {
 	Redis *RedisConfig `cfg:"redis" json:"redis"`
 }
 
-func (c *PubSubConfig) New(groupID string, logger wkafka.Logger) (pubsub, error) {
+func (c *PubSubConfig) New(id string, logger wkafka.Logger) (pubsub, error) {
 	if c.Redis != nil {
-		return newRedis(c.Redis, c.Prefix+groupID, logger)
+		return newRedis(c.Redis, c.Prefix+id, logger)
 	}
 
 	return nil, nil
 }
 
 func (h *Handler) StartPubSub(ctx context.Context) error {
-	h.client.GetLogger().Info("starting pubsub for handler with topic", "topic", h.pubsub.GetTopic())
+	h.client.Logger().Info("starting pubsub for handler with topic", "topic", h.pubsub.GetTopic())
 	return h.pubsub.Subscribe(ctx, func(data PubSubModel) error {
 		switch data.Type {
 		case "skip-append":
@@ -40,19 +40,68 @@ func (h *Handler) StartPubSub(ctx context.Context) error {
 				return err
 			}
 
-			h.client.Skip(wkafka.SkipAppend(skip))
+			h.client.Skip(ctx, wkafka.SkipAppend(skip))
 		case "skip-replace":
 			var skip wkafka.SkipMap
 			if err := json.Unmarshal(data.Value, &skip); err != nil {
 				return err
 			}
 
-			h.client.Skip(wkafka.SkipReplace(skip))
+			h.client.Skip(ctx, wkafka.SkipReplace(skip))
+		case "info":
+			var infoID InfoResponseID
+			if err := json.Unmarshal(data.Value, &infoID); err != nil {
+				return err
+			}
+
+			if infoID.ID == "" {
+				return fmt.Errorf("info id is empty")
+			}
+
+			h.BroadcastInfo(string(data.Value))
+		case "delete":
+			var infoID InfoResponseID
+			if err := json.Unmarshal(data.Value, &infoID); err != nil {
+				return err
+			}
+
+			if infoID.ID == "" {
+				return fmt.Errorf("info id is empty")
+			}
+
+			h.BroadcastDelete(infoID.ID)
+		case "publish-info":
+			// publish info to pubsub
+			if err := h.PublishInfo(ctx); err != nil {
+				return fmt.Errorf("publish info: %w", err)
+			}
 		default:
 			return fmt.Errorf("unknown type: %s", data.Type)
 		}
 
 		return nil
+	})
+}
+
+func (h *Handler) PublishInfo(ctx context.Context) error {
+	info := h.getInfo()
+
+	return h.pubsub.Publish(ctx, PubSubModelPublish{
+		Type:  "info",
+		Value: info,
+	})
+}
+
+func (h *Handler) RequestPublishInfo(ctx context.Context) error {
+	return h.pubsub.Publish(ctx, PubSubModelPublish{
+		Type: "publish-info",
+	})
+}
+
+func (h *Handler) PublishDelete(ctx context.Context) error {
+	return h.pubsub.Publish(ctx, PubSubModelPublish{
+		Type:  "delete",
+		Value: InfoResponseID{ID: h.id},
 	})
 }
 
@@ -126,6 +175,11 @@ func (r *Redis) Subscribe(ctx context.Context, handler func(PubSubModel) error) 
 	for {
 		select {
 		case msg := <-ch:
+			if msg == nil {
+				r.log.Error("pubsub message is nil")
+				continue
+			}
+
 			var data PubSubModel
 			if err := json.Unmarshal([]byte(msg.Payload), &data); err != nil {
 				r.log.Error("pubsub unmarshal", "error", err)

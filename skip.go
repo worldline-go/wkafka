@@ -20,6 +20,10 @@ func newSkipper(c *sync.RWMutex) func(cfg *ConsumerConfig, r *kgo.Record) bool {
 }
 
 func skipCheck(skip map[string]map[int32]OffsetConfig, r *kgo.Record) bool {
+	if r == nil {
+		return false
+	}
+
 	if len(skip) == 0 {
 		return false
 	}

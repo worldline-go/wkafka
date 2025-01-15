@@ -151,8 +151,8 @@ func WithPingBackoff(b backoff.BackOff) Option {
 	}
 }
 
-func WithPlugin(name string, fn PluginFunc) Option {
+func WithPlugin[T any](name string, fn PluginFunc[T]) Option {
 	return func(o *options) {
-		o.Plugin.Add(name, fn)
+		o.Plugin.Add(name, pluginConvert(fn))
 	}
 }

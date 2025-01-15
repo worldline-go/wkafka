@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -28,17 +29,21 @@ type Client struct {
 	consumerMutex  sync.RWMutex
 	logger         Logger
 
-	dlqRecord *kgo.Record
-	hook      *hooker
-	cancel    context.CancelFunc
-	Trigger   []func()
+	dlqRecord       *kgo.Record
+	dlqCheckTrigger func()
+	dlqRetryAt      time.Time
+	hook            *hooker
+	cancel          context.CancelFunc
+	trigger         []func(context.Context)
 
+	topicsCheck []string
+	appName     string
 	// log purpose
 
-	Brokers   []string
-	DLQTopics []string
-	Topics    []string
-	Meter     Meter
+	brokers   []string
+	dlqTopics []string
+	topics    []string
+	meter     Meter
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -76,8 +81,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		consumerConfig: o.ConsumerConfig,
 		logger:         o.Logger,
 		clientID:       []byte(o.ClientID),
-		Meter:          o.Meter,
-		hook:           &hooker{},
+		meter:          o.Meter,
+		hook: &hooker{
+			ctx: context.Background(),
+		},
 	}
 
 	kgoClient, err := newClient(c, cfg, &o, false)
@@ -123,13 +130,16 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		}
 	}
 
-	c.Brokers = cfg.Brokers
+	c.brokers = cfg.Brokers
 
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
+	c.topicsCheck = slices.Concat(c.topics, c.dlqTopics)
+	c.appName = o.AppName
+
 	for name, p := range o.Plugin.holder {
-		if err := p(ctx, c, cfg.Plugin[name]); err != nil {
+		if err := p(ctx, c, cfg.Plugins[name]); err != nil {
 			return nil, fmt.Errorf("plugin %s: %w", name, err)
 		}
 	}
@@ -223,10 +233,10 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			}
 
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(topics...))
-			c.DLQTopics = topics
+			c.dlqTopics = topics
 		} else {
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.Topics...))
-			c.Topics = o.ConsumerConfig.Topics
+			c.topics = o.ConsumerConfig.Topics
 		}
 	}
 
@@ -278,7 +288,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	o := optionConsumer{
 		Client:         c,
 		ConsumerConfig: c.consumerConfig,
-		Meter:          c.Meter,
+		Meter:          c.meter,
 	}
 
 	opts = append([]OptionConsumer{OptionConsumer(callback)}, opts...)
@@ -295,9 +305,9 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	if c.KafkaDLQ == nil {
 		c.hook.setCtx(ctx)
 
-		c.logger.Info("wkafka start consuming", "topics", c.Topics)
+		c.logger.Info("wkafka start consuming", "topics", c.topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
-			return fmt.Errorf("failed to consume %v: %w", c.Topics, err)
+			return fmt.Errorf("failed to consume %v: %w", c.topics, err)
 		}
 
 		return nil
@@ -311,18 +321,18 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	c.hook.setCtx(ctx)
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming", "topics", c.Topics)
+		c.logger.Info("wkafka start consuming", "topics", c.topics)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
-			return fmt.Errorf("failed to consume %v: %w", c.Topics, err)
+			return fmt.Errorf("failed to consume %v: %w", c.topics, err)
 		}
 
 		return nil
 	})
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming DLQ", "topics", c.DLQTopics)
+		c.logger.Info("wkafka start consuming DLQ", "topics", c.dlqTopics)
 		if err := o.ConsumerDLQ.Consume(ctx, c.KafkaDLQ); err != nil {
-			return fmt.Errorf("failed to consume DLQ %v: %w", c.Topics, err)
+			return fmt.Errorf("failed to consume DLQ %v: %w", c.topics, err)
 		}
 
 		return nil
@@ -351,22 +361,38 @@ func (c *Client) Admin() *kadm.Client {
 	return kadm.NewClient(c.Kafka)
 }
 
-// Skip for modifying skip configuration in runtime.
-//   - Useful for DLQ topic.
-//   - Don't wait inside the modify function.
-func (c *Client) Skip(modify func(SkipMap) SkipMap) {
+func (c *Client) modifySkip(modify func(SkipMap) SkipMap) {
 	c.consumerMutex.Lock()
 	defer c.consumerMutex.Unlock()
 
+	newSkip := modify(cloneSkip(c.consumerConfig.Skip))
+
+	// eliminate not related topics
+	for topic := range newSkip {
+		if !slices.Contains(c.topicsCheck, topic) {
+			delete(newSkip, topic)
+		}
+	}
+
+	c.consumerConfig.Skip = newSkip
+}
+
+// Skip for modifying skip configuration in runtime.
+//   - Useful for DLQ topic.
+//   - Don't wait inside the modify function.
+func (c *Client) Skip(ctx context.Context, modify func(SkipMap) SkipMap) {
 	if modify == nil {
 		return
 	}
 
-	c.consumerConfig.Skip = modify(c.consumerConfig.Skip)
+	c.modifySkip(modify)
 
-	c.callTrigger()
+	c.callTrigger(ctx)
+	if c.dlqCheckTrigger != nil {
+		c.dlqCheckTrigger()
+	}
 
-	c.logger.Debug("wkafka skip modified", "skip", c.consumerConfig.Skip)
+	c.logger.Info("wkafka skip modified", "skip", c.consumerConfig.Skip)
 }
 
 // SkipCheck returns skip configuration's deep clone.
@@ -381,27 +407,57 @@ func (c *Client) ClientID() []byte {
 	return c.clientID
 }
 
-// SetDLQRecord to set stucked DLQRecord.
+// setDLQRecord to set stucked DLQRecord.
 //   - Using in DLQ iteration.
-func (c *Client) setDLQRecord(r *kgo.Record) {
+func (c *Client) setDLQRecord(r *kgo.Record, t time.Time) {
 	c.dlqRecord = r
+	c.dlqRetryAt = t
+}
 
-	c.callTrigger()
+// DLQRetryAt returns stucked DLQRecord's retry time.
+//   - Using in DLQ iteration only if DLQRecord is not nil.
+func (c *Client) DLQRetryAt() time.Time {
+	return c.dlqRetryAt
 }
 
 // DLQRecord returns stucked DLQRecord if exists.
+//   - Warning: return pointer and not modify it.
 func (c *Client) DLQRecord() *kgo.Record {
 	return c.dlqRecord
 }
 
-func (c *Client) callTrigger() {
+func (c *Client) callTrigger(ctx context.Context) {
 	go func() {
-		for _, t := range c.Trigger {
-			t()
+		for _, t := range c.trigger {
+			if ctx.Err() != nil {
+				return
+			}
+
+			t(ctx)
 		}
 	}()
 }
 
-func (c *Client) GetLogger() Logger {
+func (c *Client) AddTrigger(t func(context.Context)) {
+	c.trigger = append(c.trigger, t)
+}
+
+func (c *Client) Logger() Logger {
 	return c.logger
+}
+
+func (c *Client) Topics() []string {
+	return c.topics
+}
+
+func (c *Client) Brokers() []string {
+	return c.brokers
+}
+
+func (c *Client) DLQTopics() []string {
+	return c.dlqTopics
+}
+
+func (c *Client) AppName() string {
+	return c.appName
 }

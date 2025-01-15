@@ -17,10 +17,16 @@ type Response struct {
 }
 
 type InfoResponse struct {
+	ID        string         `json:"id"`
 	DLQTopics []string       `json:"dlq_topics"`
 	Topics    []string       `json:"topics"`
 	Skip      wkafka.SkipMap `json:"skip"`
 	DLQRecord *DLQRecord     `json:"dlq_record"`
+	RetryAt   string         `json:"retry_at"`
+}
+
+type InfoResponseID struct {
+	ID string `json:"id"`
 }
 
 type DLQRecord struct {

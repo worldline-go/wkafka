@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/worldline-go/struct2"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/worldline-go/wkafka"
 )
 
@@ -27,15 +29,15 @@ var fileFS embed.FS
 //
 //go:generate swag init -pd -d ./ -g handler.go --ot json -o ./files
 type Handler struct {
+	id      string
 	client  *wkafka.Client
 	mux     *http.ServeMux
 	pattern string
 	addr    string
 
-	channels        map[uint64]chan string
-	lastMessageInfo string
-	key             uint64
-	mutex           sync.RWMutex
+	channels map[uint64]chan MessageChannel
+	key      uint64
+	mutex    sync.RWMutex
 
 	pubsub pubsub
 }
@@ -49,24 +51,24 @@ type Config struct {
 	PubSub     *PubSubConfig `cfg:"pubsub"      json:"pubsub"`
 }
 
-func PluginWithName() (string, wkafka.PluginFunc) {
+func (c *Config) ToOption() Option {
+	return func(o *option) {
+		o.Addr = c.Addr
+		o.PathPrefix = c.PathPrefix
+		o.PubSub = c.PubSub
+	}
+}
+
+func PluginWithName() (string, wkafka.PluginFunc[Config]) {
 	return PluginName, Plugin
 }
 
-func Plugin(ctx context.Context, client *wkafka.Client, config interface{}) error {
-	cfgMap, _ := config.(map[string]interface{})
-	cfg := Config{}
-
-	decoder := struct2.Decoder{TagName: "cfg"}
-	if err := decoder.Decode(cfgMap, &cfg); err != nil {
-		return fmt.Errorf("failed to decode config: %w", err)
-	}
-
+func Plugin(ctx context.Context, client *wkafka.Client, cfg Config) error {
 	if !cfg.Enabled {
 		return nil
 	}
 
-	h, err := New(client, WithAddr(cfg.Addr), WithPathPrefix(cfg.PathPrefix), WithPubSub(cfg.PubSub))
+	h, err := New(ctx, client, cfg.ToOption())
 	if err != nil {
 		return err
 	}
@@ -74,15 +76,17 @@ func Plugin(ctx context.Context, client *wkafka.Client, config interface{}) erro
 	if h.pubsub != nil {
 		go func() {
 			if err := h.StartPubSub(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				client.GetLogger().Error("failed to start pubsub", "error", err)
+				client.Logger().Error("failed to start pubsub", "error", err)
 				client.Close()
 			}
+
+			h.Close()
 		}()
 	}
 
 	go func() {
 		if err := h.Serve(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			client.GetLogger().Error("failed to serve handler", "error", err)
+			client.Logger().Error("failed to serve handler", "error", err)
 			client.Close()
 		}
 	}()
@@ -91,7 +95,7 @@ func Plugin(ctx context.Context, client *wkafka.Client, config interface{}) erro
 }
 
 // NewHandler returns a http.Handler implementation.
-func New(client *wkafka.Client, opts ...Option) (*Handler, error) {
+func New(ctx context.Context, client *wkafka.Client, opts ...Option) (*Handler, error) {
 	o := option{}
 	o.apply(opts...)
 
@@ -100,22 +104,25 @@ func New(client *wkafka.Client, opts ...Option) (*Handler, error) {
 	}
 
 	h := &Handler{
+		id:       ulid.Make().String(),
 		client:   client,
-		channels: make(map[uint64]chan string),
+		channels: make(map[uint64]chan MessageChannel),
 		addr:     o.Addr,
 	}
 
 	if o.PubSub != nil {
-		pubsub, err := o.PubSub.New(client.GroupID(), client.GetLogger())
+		pubsub, err := o.PubSub.New(client.AppName()+"-"+client.GroupID(), client.Logger())
 		if err != nil {
 			return nil, err
 		}
 
 		h.pubsub = pubsub
+
+		h.TriggerInfo(ctx)
 	}
 
 	// add trigger function to detect changes
-	client.Trigger = append(client.Trigger, h.TriggerInfo)
+	client.AddTrigger(h.TriggerInfo)
 
 	prefix := "/" + strings.Trim(o.PathPrefix, "/")
 	if prefix != "/" {
@@ -137,7 +144,6 @@ func New(client *wkafka.Client, opts ...Option) (*Handler, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc(http.MethodPut+" "+h.pattern+"v1/skip", h.SkipSet)
 	mux.HandleFunc(http.MethodPatch+" "+h.pattern+"v1/skip", h.SkipUpdate)
-	mux.HandleFunc(http.MethodPatch+" "+h.pattern+"v1/skip-dlq", h.SkipDLQ)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"v1/info", h.Info)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"v1/event", h.Event)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"ui/", ui.ServeHTTP)
@@ -145,9 +151,19 @@ func New(client *wkafka.Client, opts ...Option) (*Handler, error) {
 
 	h.mux = mux
 
-	h.TriggerInfo()
-
 	return h, nil
+}
+
+func (h *Handler) Close() error {
+	if h.pubsub != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		h.PublishDelete(ctx)
+		return h.pubsub.Close()
+	}
+
+	return nil
 }
 
 func (h *Handler) UI() (http.Handler, error) {
@@ -213,7 +229,7 @@ func (h *Handler) Serve(ctx context.Context) error {
 	}
 
 	if h.client != nil {
-		if l := h.client.GetLogger(); l != nil {
+		if l := h.client.Logger(); l != nil {
 			l.Info("starting listening wkafka handler", "addr", s.Addr)
 		}
 	}
@@ -250,48 +266,10 @@ func (h *Handler) SkipUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		h.client.Skip(wkafka.SkipAppend(skipRequest))
+		h.client.Skip(r.Context(), wkafka.SkipAppend(skipRequest))
 	}
 
 	httpResponse(w, "skip appended", http.StatusOK)
-}
-
-// @Summary Skip on DLQ topic.
-// @Tags wkafka
-// @Accept json
-// @Produce json
-// @Param skip body SkipDLQRequest true "skip"
-// @Success 200 {object} Response
-// @Router /v1/skip-dlq [PATCH]
-func (h *Handler) SkipDLQ(w http.ResponseWriter, r *http.Request) {
-	if len(h.client.DLQTopics) == 0 {
-		httpResponse(w, "dlq not enabled", http.StatusBadRequest)
-	}
-
-	var skipDLQRequest SkipDLQRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&skipDLQRequest); err != nil {
-		httpResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	skipRequest := SkipRequest{
-		h.client.DLQTopics[0]: skipDLQRequest,
-	}
-
-	if h.pubsub != nil {
-		if err := h.pubsub.Publish(r.Context(), PubSubModelPublish{
-			Type:  "skip-append",
-			Value: skipRequest,
-		}); err != nil {
-			httpResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		h.client.Skip(wkafka.SkipAppend(skipRequest))
-	}
-
-	httpResponse(w, "skip DLQ appended", http.StatusOK)
 }
 
 // @Summary Set the skip.
@@ -318,7 +296,7 @@ func (h *Handler) SkipSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		h.client.Skip(wkafka.SkipReplace(skipRequest))
+		h.client.Skip(r.Context(), wkafka.SkipReplace(skipRequest))
 	}
 
 	httpResponse(w, "skip replaced", http.StatusOK)
@@ -326,10 +304,12 @@ func (h *Handler) SkipSet(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getInfo() *InfoResponse {
 	return &InfoResponse{
-		DLQTopics: h.client.DLQTopics,
-		Topics:    h.client.Topics,
+		ID:        h.id,
+		DLQTopics: h.client.DLQTopics(),
+		Topics:    h.client.Topics(),
 		Skip:      h.client.SkipCheck(),
 		DLQRecord: dlqRecord(h.client.DLQRecord()),
+		RetryAt:   h.client.DLQRetryAt().Format(time.RFC3339),
 	}
 }
 
@@ -338,8 +318,14 @@ func (h *Handler) getInfo() *InfoResponse {
 // @Tags wkafka
 // @Success 200 {object} InfoResponse
 // @Router /v1/info [GET]
-func (h *Handler) Info(w http.ResponseWriter, _ *http.Request) {
-	httpResponseJSON(w, h.getInfo(), http.StatusOK)
+func (h *Handler) Info(w http.ResponseWriter, r *http.Request) {
+	if h.pubsub == nil {
+		httpResponseJSON(w, h.getInfo(), http.StatusOK)
+		return
+	}
+
+	// send info request to pubsub and get the response
+	h.PublishInfo(r.Context())
 }
 
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
@@ -359,13 +345,17 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// first value
-	fmt.Fprintf(w, "event: info\ndata: %s\n\n", h.lastMessageInfo)
+	h.TriggerInfo(r.Context())
+
+	vByte, _ := json.Marshal(h.getInfo())
+
+	fmt.Fprintf(w, "event: info\ndata: %s\n\n", string(vByte))
 	flusher.Flush()
 
 	for {
 		select {
 		case message := <-messageChan:
-			fmt.Fprintf(w, "event: info\ndata: %s\n\n", message)
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", message.Type, message.Value)
 			flusher.Flush()
 		case <-r.Context().Done():
 			h.deleteClient(clientKey)

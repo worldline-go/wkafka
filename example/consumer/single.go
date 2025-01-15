@@ -4,14 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/plugin/kotel"
 
 	"github.com/worldline-go/wkafka"
-	"github.com/worldline-go/wkafka/handler"
+	"github.com/worldline-go/wkafka/plugins/handler"
 )
+
+func getPort() string {
+	if v := os.Getenv("PORT"); v != "" {
+		return ":" + v
+	}
+
+	return ":8080"
+}
 
 var (
 	kafkaConfigSingle = wkafka.Config{
@@ -19,10 +28,10 @@ var (
 		Consumer: wkafka.ConsumerPreConfig{
 			FormatDLQTopic: "finops_{{.AppName}}_dlq",
 		},
-		Plugin: map[string]interface{}{
+		Plugins: map[string]interface{}{
 			handler.PluginName: map[string]interface{}{
 				"enabled": true,
-				"addr":    ":8080",
+				"addr":    getPort(),
 				"pubsub": map[string]interface{}{
 					"prefix": "finops_",
 					"redis": map[string]interface{}{

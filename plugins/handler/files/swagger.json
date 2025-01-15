@@ -86,39 +86,6 @@
                     }
                 }
             }
-        },
-        "/v1/skip-dlq": {
-            "patch": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "wkafka"
-                ],
-                "summary": "Skip on DLQ topic.",
-                "parameters": [
-                    {
-                        "description": "skip",
-                        "name": "skip",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.SkipDLQRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handler.Response"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -183,6 +150,12 @@
                         "type": "string"
                     }
                 },
+                "id": {
+                    "type": "string"
+                },
+                "retry_at": {
+                    "type": "string"
+                },
                 "skip": {
                     "$ref": "#/definitions/wkafka.SkipMap"
                 },
@@ -200,12 +173,6 @@
                 "message": {
                     "type": "string"
                 }
-            }
-        },
-        "handler.SkipDLQRequest": {
-            "type": "object",
-            "additionalProperties": {
-                "$ref": "#/definitions/wkafka.OffsetConfig"
             }
         },
         "handler.SkipRequest": {

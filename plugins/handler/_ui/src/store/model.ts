@@ -1,8 +1,12 @@
 export interface Info {
+  id: string;
   dlq_topics?: string[];
   topics?: string[];
   skip?: Map<string, Map<number, OffsetConfig>>;
   dlq_record?: DlqRecord;
+  retry_at?: string;
+
+  updated_at: number;
 }
 
 export interface OffsetConfig {

@@ -47,6 +47,9 @@ importers:
       immutability-helper:
         specifier: ^3.1.1
         version: 3.1.1
+      js-base64:
+        specifier: ^3.7.7
+        version: 3.7.7
       postcss:
         specifier: ^8.4.41
         version: 8.4.41
@@ -83,6 +86,9 @@ importers:
       svelte-spa-router:
         specifier: ^4.0.1
         version: 4.0.1
+      svelte-tree-view:
+        specifier: ^1.4.2
+        version: 1.4.2(svelte@4.2.18)
       swagger-ui:
         specifier: ^5.18.2
         version: 5.18.2
@@ -1521,6 +1527,9 @@ packages:
     resolution: {integrity: sha512-gFqAIbuKyyso/3G2qhiO2OM6shY6EPP/R0+mkDbyspxKazh8BXDC5FiFsUjlczgdNz/vfra0da2y+aHrusLG/Q==}
     hasBin: true
 
+  js-base64@3.7.7:
+    resolution: {integrity: sha512-7rCnleh0z2CkXhH67J8K1Ytz0b2Y+yxTPL+/KOJoa20hfnVQ/3/T6W/KflYI4bRHRagNeXeU2bkNGI3v1oS/lw==}
+
   js-file-download@0.4.12:
     resolution: {integrity: sha512-rML+NkoD08p5Dllpjo0ffy4jRHeY6Zsapvr/W86N7E0yuzAO6qa5X9+xog6zQNlH102J7IXljNY2FtS6Lj3ucg==}
 
@@ -2425,6 +2434,11 @@ packages:
 
   svelte-spa-router@4.0.1:
     resolution: {integrity: sha512-2JkmUQ2f9jRluijL58LtdQBIpynSbem2eBGp4zXdi7aDY1znbR6yjw0KsonD0aq2QLwf4Yx4tBJQjxIjgjXHKg==}
+
+  svelte-tree-view@1.4.2:
+    resolution: {integrity: sha512-z3yQq+/4CceyefVj03t9BG9AiZ7syovmRRo96aj8V65d1FsRS/BL2AxzcD4vl5GJg7o9qbz2mWWJzyFWENISCQ==}
+    peerDependencies:
+      svelte: '>=3'
 
   svelte@4.2.18:
     resolution: {integrity: sha512-d0FdzYIiAePqRJEb90WlJDkjUEx42xhivxN8muUBmfZnP+tzUgz12DJ2hRJi8sIHCME7jeK1PTMgKPSfTd8JrA==}
@@ -4248,6 +4262,8 @@ snapshots:
 
   jiti@1.21.0: {}
 
+  js-base64@3.7.7: {}
+
   js-file-download@0.4.12: {}
 
   js-tokens@4.0.0: {}
@@ -5085,6 +5101,10 @@ snapshots:
   svelte-spa-router@4.0.1:
     dependencies:
       regexparam: 2.0.2
+
+  svelte-tree-view@1.4.2(svelte@4.2.18):
+    dependencies:
+      svelte: 4.2.18
 
   svelte@4.2.18:
     dependencies:

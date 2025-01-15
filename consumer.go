@@ -168,16 +168,21 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			return nil
 		}
 
+		processDLQ := newDLQProcess(
+			&customer,
+			o.Client.partitionHandlerDLQ.IsRevokedRecord,
+			o.Client.setDLQRecord,
+			o.Client.callTrigger,
+			dlqProcessBatch(fn))
+
 		o.ConsumerDLQ = &consumerBatch[T]{
 			customer:         &customer,
 			IsDLQ:            true,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
-			DLQProcess: newDLQProcess(
-				&customer,
-				o.Client.partitionHandlerDLQ.IsRevokedRecord,
-				o.Client.setDLQRecord,
-				dlqProcessBatch(fn)),
+			DLQProcess:       processDLQ,
 		}
+
+		o.Client.dlqCheckTrigger = processDLQ.Trigger
 
 		return nil
 	}
@@ -209,16 +214,21 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			return nil
 		}
 
+		processDLQ := newDLQProcess(
+			&customer,
+			o.Client.partitionHandlerDLQ.IsRevokedRecord,
+			o.Client.setDLQRecord,
+			o.Client.callTrigger,
+			fn)
+
 		o.ConsumerDLQ = &consumerSingle[T]{
 			customer:         &customer,
 			PartitionHandler: o.Client.partitionHandlerDLQ,
 			IsDLQ:            true,
-			DLQProcess: newDLQProcess(
-				&customer,
-				o.Client.partitionHandlerDLQ.IsRevokedRecord,
-				o.Client.setDLQRecord,
-				fn),
+			DLQProcess:       processDLQ,
 		}
+
+		o.Client.dlqCheckTrigger = processDLQ.Trigger
 
 		return nil
 	}
@@ -309,9 +319,14 @@ func cloneSkip(skip SkipMap) SkipMap {
 			offsets := make([]int64, len(offset.Offsets))
 			copy(offsets, offset.Offsets)
 
+			var before *int64
+			if offset.Before != nil {
+				before = ToPtr(*offset.Before)
+			}
+
 			skipNew[topic][partition] = OffsetConfig{
 				Offsets: offsets,
-				Before:  offset.Before,
+				Before:  before,
 			}
 		}
 	}

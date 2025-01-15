@@ -7,7 +7,7 @@
 
 <a
   href={`#${path}`}
-  class="h-full hover:bg-green-700 hover:text-white"
+  class="h-full hover:bg-yellow-500 hover:text-white"
   use:active={{
     path: path,
     className: "bg-green-500 text-gray-100",
