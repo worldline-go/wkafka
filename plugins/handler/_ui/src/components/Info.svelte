@@ -1,7 +1,7 @@
 <script lang="ts">
   import { storeInfo } from "@/store/store";
   import TreeView from "svelte-tree-view";
-  import Skip from "./Skip.svelte";
+  import Action from "./Action.svelte";
   import { getField, getFieldWithDecode } from "@/helper/codec";
   import View from "./View.svelte";
   import type { Info } from "@/store/model";
@@ -66,13 +66,15 @@
               <View value64={value.dlq_record.value} title="Record" />
               <View
                 value64={getField("error", value.dlq_record.headers)}
-                title="Error"
+                title="Record Error"
               />
+              <hr class="my-2" />
+              <View value={value.error} title="Process Error" />
             </div>
           </div>
           <div class="flex flex-row justify-between items-baseline">
             <div class="mt-2">
-              <Skip
+              <Action
                 topic={value.dlq_record.topic}
                 partition={value.dlq_record.partition}
                 offset={value.dlq_record.offset}

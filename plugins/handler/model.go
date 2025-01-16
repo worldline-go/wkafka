@@ -23,6 +23,7 @@ type InfoResponse struct {
 	Skip      wkafka.SkipMap `json:"skip"`
 	DLQRecord *DLQRecord     `json:"dlq_record"`
 	RetryAt   string         `json:"retry_at"`
+	Error     string         `json:"error"`
 }
 
 type InfoResponseID struct {
@@ -54,7 +55,7 @@ type PubSubModelPublish struct {
 	Value interface{} `json:"value"`
 }
 
-func dlqRecord(r *wkafka.Record) *DLQRecord {
+func dlqRecordTransform(r *wkafka.Record) *DLQRecord {
 	if r == nil {
 		return nil
 	}

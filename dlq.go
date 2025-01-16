@@ -13,24 +13,25 @@ import (
 type DLQRecord struct {
 	Record  *kgo.Record
 	RetryAt time.Time
+	Err     error
 }
 
 type dlqProcess[T any] struct {
 	customer *customer[T]
 
 	isRevokedRecord func(r *kgo.Record) bool
-	setDLQRecord    func(r *kgo.Record, t time.Time)
+	setDLQRecord    func(r *kgo.Record, t time.Time, err error)
 	callTrigger     func(ctx context.Context)
 	processDLQ      func(ctx context.Context, msg T) error
 
-	checkFunc      func()
+	checkFunc      func(opts []OptionDLQTriggerFn)
 	checkFuncMutex sync.Mutex
 }
 
 func newDLQProcess[T any](
 	c *customer[T],
 	isRevokedRecord func(r *kgo.Record) bool,
-	dlqRecord func(r *kgo.Record, t time.Time),
+	dlqRecord func(r *kgo.Record, t time.Time, err error),
 	callTrigger func(ctx context.Context),
 	processDLQ func(ctx context.Context, msg T) error,
 ) *dlqProcess[T] {
@@ -86,7 +87,7 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 
 	firstIteration := true
 	defer func() {
-		d.setDLQRecord(nil, time.Time{})
+		d.setDLQRecord(nil, time.Time{}, nil)
 		d.setCheckFunc(nil)
 		d.callTrigger(ctx)
 	}()
@@ -105,18 +106,40 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 		if err := d.iterationRecordDLQ(ctx, r); err != nil {
 			errOrg, ok := IsDQLError(err)
 			var errWrapped error
+			var errOrgDefault error
 			if ok {
+				errOrgDefault = errOrg.Err
 				errWrapped = wrapErr(r, errOrg.Err, true)
 			} else {
+				errOrgDefault = err
 				errWrapped = wrapErr(r, err, true)
 			}
 
 			d.customer.Logger.Error("DLQ process failed", "error", errWrapped, "retry_interval", wait.CurrentInterval().Truncate(time.Second).String())
 
-			d.setDLQRecord(r, time.Now().Add(wait.CurrentInterval()))
+			d.setDLQRecord(r, time.Now().Add(wait.CurrentInterval()), errOrgDefault)
 
 			if firstIteration {
-				d.setCheckFunc(func() {
+				d.setCheckFunc(func(opts []OptionDLQTriggerFn) {
+					o := &OptionDLQTrigger{}
+					for _, opt := range opts {
+						opt(o)
+					}
+
+					if o.Force {
+						wait.Trigger()
+
+						return
+					}
+
+					if o.Specs != nil {
+						if r.Topic == o.Specs.Topic && r.Partition == o.Specs.Partition && r.Offset == o.Specs.Offset {
+							wait.Trigger()
+
+							return
+						}
+					}
+
 					if d.customer.Skip(d.customer.Cfg, r) {
 						wait.Trigger()
 					}
@@ -140,18 +163,52 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 	return nil
 }
 
-func (d *dlqProcess[T]) Trigger() {
+func (d *dlqProcess[T]) Trigger(opts []OptionDLQTriggerFn) {
 	d.checkFuncMutex.Lock()
 	defer d.checkFuncMutex.Unlock()
 
 	if d.checkFunc != nil {
-		d.checkFunc()
+		d.checkFunc(opts)
 	}
 }
 
-func (d *dlqProcess[T]) setCheckFunc(fn func()) {
+func (d *dlqProcess[T]) setCheckFunc(fn func(opts []OptionDLQTriggerFn)) {
 	d.checkFuncMutex.Lock()
 	defer d.checkFuncMutex.Unlock()
 
 	d.checkFunc = fn
+}
+
+// ////////////////////////////////////////////////////////////////////////////
+
+type DLQTriggerSpecs struct {
+	Topic     string `cfg:"topic"     json:"topic"`
+	Partition int32  `cfg:"partition" json:"partition"`
+	Offset    int64  `cfg:"offset"    json:"offset"`
+}
+
+type OptionDLQTrigger struct {
+	Force bool             `cfg:"force" json:"force"`
+	Specs *DLQTriggerSpecs `cfg:"specs" json:"specs"`
+}
+
+func (o *OptionDLQTrigger) ToOption() OptionDLQTriggerFn {
+	return func(opt *OptionDLQTrigger) {
+		opt.Force = o.Force
+		opt.Specs = o.Specs
+	}
+}
+
+type OptionDLQTriggerFn func(*OptionDLQTrigger)
+
+func WithForceDLQTrigger() OptionDLQTriggerFn {
+	return func(o *OptionDLQTrigger) {
+		o.Force = true
+	}
+}
+
+func WithDLQTriggerSpecs(specs *DLQTriggerSpecs) OptionDLQTriggerFn {
+	return func(o *OptionDLQTrigger) {
+		o.Specs = specs
+	}
 }

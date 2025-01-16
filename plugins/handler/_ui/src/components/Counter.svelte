@@ -12,6 +12,8 @@
   });
 
   const startTimer = (dt: string) => {
+    clearInterval(timer);
+
     let end = Date.parse(dt);
 
     timer = countDownTimer(end, (v: string) => {

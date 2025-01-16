@@ -5,6 +5,7 @@ export interface Info {
   skip?: Map<string, Map<number, OffsetConfig>>;
   dlq_record?: DlqRecord;
   retry_at?: string;
+  error?: string;
 
   updated_at: number;
 }

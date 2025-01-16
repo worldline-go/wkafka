@@ -23,6 +23,33 @@
                 }
             }
         },
+        "/v1/retry-dlq": {
+            "post": {
+                "tags": [
+                    "wkafka"
+                ],
+                "summary": "Get the current information of the client.",
+                "parameters": [
+                    {
+                        "description": "retry",
+                        "name": "skip",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/wkafka.OptionDLQTrigger"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/skip": {
             "put": {
                 "consumes": [
@@ -150,6 +177,9 @@
                         "type": "string"
                     }
                 },
+                "error": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -184,6 +214,20 @@
                 }
             }
         },
+        "wkafka.DLQTriggerSpecs": {
+            "type": "object",
+            "properties": {
+                "offset": {
+                    "type": "integer"
+                },
+                "partition": {
+                    "type": "integer"
+                },
+                "topic": {
+                    "type": "string"
+                }
+            }
+        },
         "wkafka.OffsetConfig": {
             "type": "object",
             "properties": {
@@ -197,6 +241,17 @@
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "wkafka.OptionDLQTrigger": {
+            "type": "object",
+            "properties": {
+                "force": {
+                    "type": "boolean"
+                },
+                "specs": {
+                    "$ref": "#/definitions/wkafka.DLQTriggerSpecs"
                 }
             }
         },

@@ -5,16 +5,19 @@
 
   export let title = "";
   export let value64 = "";
+  export let value = "";
 
   let toggle = false;
-  let value = "";
   let jsonValue: unknown;
   let className = "";
 
   export { className as class };
 
   onMount(() => {
-    value = base64ToStr(value64);
+    if (value64 != "") {
+      value = base64ToStr(value64);
+    }
+
     jsonValue = parseJSON(value);
 
     if (!!jsonValue) {

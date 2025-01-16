@@ -29,12 +29,13 @@ type Client struct {
 	consumerMutex  sync.RWMutex
 	logger         Logger
 
-	dlqRecord       *kgo.Record
-	dlqCheckTrigger func()
-	dlqRetryAt      time.Time
-	hook            *hooker
-	cancel          context.CancelFunc
-	trigger         []func(context.Context)
+	dlqRecord       DLQRecord
+	dlqRetryTrigger func(opts []OptionDLQTriggerFn)
+	dlqMutex        sync.RWMutex
+
+	hook    *hooker
+	cancel  context.CancelFunc
+	trigger []func(context.Context)
 
 	topicsCheck []string
 	appName     string
@@ -388,8 +389,8 @@ func (c *Client) Skip(ctx context.Context, modify func(SkipMap) SkipMap) {
 	c.modifySkip(modify)
 
 	c.callTrigger(ctx)
-	if c.dlqCheckTrigger != nil {
-		c.dlqCheckTrigger()
+	if c.dlqRetryTrigger != nil {
+		c.dlqRetryTrigger(nil)
 	}
 
 	c.logger.Info("wkafka skip modified", "skip", c.consumerConfig.Skip)
@@ -409,21 +410,29 @@ func (c *Client) ClientID() []byte {
 
 // setDLQRecord to set stucked DLQRecord.
 //   - Using in DLQ iteration.
-func (c *Client) setDLQRecord(r *kgo.Record, t time.Time) {
-	c.dlqRecord = r
-	c.dlqRetryAt = t
-}
+func (c *Client) setDLQRecord(r *kgo.Record, t time.Time, err error) {
+	c.dlqMutex.Lock()
+	defer c.dlqMutex.Unlock()
 
-// DLQRetryAt returns stucked DLQRecord's retry time.
-//   - Using in DLQ iteration only if DLQRecord is not nil.
-func (c *Client) DLQRetryAt() time.Time {
-	return c.dlqRetryAt
+	c.dlqRecord.Err = err
+	c.dlqRecord.Record = r
+	c.dlqRecord.RetryAt = t
 }
 
 // DLQRecord returns stucked DLQRecord if exists.
-//   - Warning: return pointer and not modify it.
-func (c *Client) DLQRecord() *kgo.Record {
+//   - Warning: return pointer record and not modify it.
+func (c *Client) DLQRecord() DLQRecord {
+	c.dlqMutex.RLock()
+	defer c.dlqMutex.RUnlock()
+
 	return c.dlqRecord
+}
+
+// DLQRetry to trigger DLQ retry and not wait sleep.
+func (c *Client) DLQRetry(opts ...OptionDLQTriggerFn) {
+	if c.dlqRetryTrigger != nil {
+		c.dlqRetryTrigger(opts)
+	}
 }
 
 func (c *Client) callTrigger(ctx context.Context) {

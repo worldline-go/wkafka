@@ -75,6 +75,13 @@ func (h *Handler) StartPubSub(ctx context.Context) error {
 			if err := h.PublishInfo(ctx); err != nil {
 				return fmt.Errorf("publish info: %w", err)
 			}
+		case "retry-dlq":
+			var opt wkafka.OptionDLQTrigger
+			if err := json.Unmarshal(data.Value, &opt); err != nil {
+				return err
+			}
+
+			h.client.DLQRetry(opt.ToOption())
 		default:
 			return fmt.Errorf("unknown type: %s", data.Type)
 		}
@@ -95,6 +102,13 @@ func (h *Handler) PublishInfo(ctx context.Context) error {
 func (h *Handler) RequestPublishInfo(ctx context.Context) error {
 	return h.pubsub.Publish(ctx, PubSubModelPublish{
 		Type: "publish-info",
+	})
+}
+
+func (h *Handler) RequestRetryDLQ(ctx context.Context, o wkafka.OptionDLQTrigger) error {
+	return h.pubsub.Publish(ctx, PubSubModelPublish{
+		Type:  "retry-dlq",
+		Value: o,
 	})
 }
 

@@ -182,7 +182,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			DLQProcess:       processDLQ,
 		}
 
-		o.Client.dlqCheckTrigger = processDLQ.Trigger
+		o.Client.dlqRetryTrigger = processDLQ.Trigger
 
 		return nil
 	}
@@ -228,7 +228,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			DLQProcess:       processDLQ,
 		}
 
-		o.Client.dlqCheckTrigger = processDLQ.Trigger
+		o.Client.dlqRetryTrigger = processDLQ.Trigger
 
 		return nil
 	}

@@ -144,6 +144,7 @@ func New(ctx context.Context, client *wkafka.Client, opts ...Option) (*Handler, 
 	mux := http.NewServeMux()
 	mux.HandleFunc(http.MethodPut+" "+h.pattern+"v1/skip", h.SkipSet)
 	mux.HandleFunc(http.MethodPatch+" "+h.pattern+"v1/skip", h.SkipUpdate)
+	mux.HandleFunc(http.MethodPost+" "+h.pattern+"v1/retry-dlq", h.RetryDLQ)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"v1/info", h.Info)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"v1/event", h.Event)
 	mux.HandleFunc(http.MethodGet+" "+h.pattern+"ui/", ui.ServeHTTP)
@@ -303,13 +304,21 @@ func (h *Handler) SkipSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getInfo() *InfoResponse {
+	dlqRecord := h.client.DLQRecord()
+
+	var errStr string
+	if dlqRecord.Err != nil {
+		errStr = dlqRecord.Err.Error()
+	}
+
 	return &InfoResponse{
 		ID:        h.id,
 		DLQTopics: h.client.DLQTopics(),
 		Topics:    h.client.Topics(),
 		Skip:      h.client.SkipCheck(),
-		DLQRecord: dlqRecord(h.client.DLQRecord()),
-		RetryAt:   h.client.DLQRetryAt().Format(time.RFC3339),
+		DLQRecord: dlqRecordTransform(dlqRecord.Record),
+		RetryAt:   dlqRecord.RetryAt.Format(time.RFC3339),
+		Error:     errStr,
 	}
 }
 
@@ -325,7 +334,36 @@ func (h *Handler) Info(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// send info request to pubsub and get the response
-	h.PublishInfo(r.Context())
+	h.RequestPublishInfo(r.Context())
+
+	httpResponse(w, "send to pubsub event", http.StatusOK)
+}
+
+// Info returns the current information of the client.
+// @Summary Get the current information of the client.
+// @Tags wkafka
+// @Param skip body wkafka.OptionDLQTrigger true "retry"
+// @Success 200 {object} Response
+// @Router /v1/retry-dlq [POST]
+func (h *Handler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
+	opt := wkafka.OptionDLQTrigger{}
+
+	if err := json.NewDecoder(r.Body).Decode(&opt); err != nil {
+		httpResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if h.pubsub == nil {
+		h.client.DLQRetry(opt.ToOption())
+
+		httpResponse(w, "skip replaced", http.StatusOK)
+		return
+	}
+
+	// send info request to pubsub
+	h.RequestRetryDLQ(r.Context(), opt)
+
+	httpResponse(w, "send to pubsub event", http.StatusOK)
 }
 
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
