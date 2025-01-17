@@ -8,6 +8,7 @@
   import { emptyDLQBanner } from "@/helper/banner";
   import Counter from "./Counter.svelte";
   import Instance from "./Instance.svelte";
+  import { skipClear } from "@/helper/api";
 
   const DLQExists = (storeInfo: Record<string, Info>) => {
     for (const [_, value] of Object.entries(storeInfo)) {
@@ -89,24 +90,36 @@
     {/each}
   </div>
 
-  <div class="border-l px-1 min-w-96">
-    <span class="block bg-yellow-100 border-b border-gray-600 mb-1">
-      Instances
-    </span>
+  <hr class="md:hidden my-2" />
 
-    <span>
-      Total Instances:
-      <span class="px-2 bg-gray-600 text-white">
-        {Object.keys($storeInfo).length}
-      </span>
-    </span>
-
-    <hr class="mb-1" />
-
+  <div class="md:border-l px-1 min-w-96">
+    <div class="mb-1">
+      <button
+        class="md:w-full bg-gray-600 hover:bg-yellow-500 text-white font-bold px-10 border-t border-b border-black"
+        on:click|preventDefault|stopPropagation={skipClear}
+      >
+        Clear Skip Configs
+      </button>
+    </div>
     <div>
-      {#each Object.entries($storeInfo) as [key, value]}
-        <Instance {key} {value} />
-      {/each}
+      <span class="block bg-yellow-100 border-b border-gray-600 mb-1">
+        Instances
+      </span>
+
+      <span>
+        Total Instances:
+        <span class="px-2 bg-gray-600 text-white">
+          {Object.keys($storeInfo).length}
+        </span>
+      </span>
+
+      <hr class="mb-1" />
+
+      <div>
+        {#each Object.entries($storeInfo) as [key, value]}
+          <Instance {key} {value} />
+        {/each}
+      </div>
     </div>
   </div>
 </div>

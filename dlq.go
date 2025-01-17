@@ -132,16 +132,34 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 						return
 					}
 
-					if o.Specs != nil {
-						if r.Topic == o.Specs.Topic && r.Partition == o.Specs.Partition && r.Offset == o.Specs.Offset {
+					if o.Spec != nil {
+						if r.Topic == o.Spec.Topic && r.Partition == o.Spec.Partition && r.Offset == o.Spec.Offset {
 							wait.Trigger()
 
 							return
 						}
+
+						return
+					}
+
+					if o.SpecPartitions != nil {
+						if partitions, ok := o.SpecPartitions[r.Topic]; ok {
+							for _, partition := range partitions {
+								if r.Partition == partition {
+									wait.Trigger()
+
+									return
+								}
+							}
+						}
+
+						return
 					}
 
 					if d.customer.Skip(d.customer.Cfg, r) {
 						wait.Trigger()
+
+						return
 					}
 				})
 
@@ -181,34 +199,41 @@ func (d *dlqProcess[T]) setCheckFunc(fn func(opts []OptionDLQTriggerFn)) {
 
 // ////////////////////////////////////////////////////////////////////////////
 
-type DLQTriggerSpecs struct {
+type DLQTriggerSpec struct {
 	Topic     string `cfg:"topic"     json:"topic"`
 	Partition int32  `cfg:"partition" json:"partition"`
 	Offset    int64  `cfg:"offset"    json:"offset"`
 }
 
 type OptionDLQTrigger struct {
-	Force bool             `cfg:"force" json:"force"`
-	Specs *DLQTriggerSpecs `cfg:"specs" json:"specs"`
+	Force          bool               `cfg:"force"           json:"force"`
+	Spec           *DLQTriggerSpec    `cfg:"spec"            json:"spec"`
+	SpecPartitions map[string][]int32 `cfg:"spec_partitions" json:"spec_partitions"`
 }
 
 func (o *OptionDLQTrigger) ToOption() OptionDLQTriggerFn {
 	return func(opt *OptionDLQTrigger) {
 		opt.Force = o.Force
-		opt.Specs = o.Specs
+		opt.Spec = o.Spec
 	}
 }
 
 type OptionDLQTriggerFn func(*OptionDLQTrigger)
 
-func WithForceDLQTrigger() OptionDLQTriggerFn {
+func WithDLQTriggerForce() OptionDLQTriggerFn {
 	return func(o *OptionDLQTrigger) {
 		o.Force = true
 	}
 }
 
-func WithDLQTriggerSpecs(specs *DLQTriggerSpecs) OptionDLQTriggerFn {
+func WithDLQTriggerSpec(specs *DLQTriggerSpec) OptionDLQTriggerFn {
 	return func(o *OptionDLQTrigger) {
-		o.Specs = specs
+		o.Spec = specs
+	}
+}
+
+func WithDLQTriggerSpecPartitions(partitions map[string][]int32) OptionDLQTriggerFn {
+	return func(o *OptionDLQTrigger) {
+		o.SpecPartitions = partitions
 	}
 }

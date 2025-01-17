@@ -101,7 +101,7 @@ func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, b
 	return validRecords, len(validRecords) != len(records)
 }
 
-func partitionLost(h *partitionHandler) func(context.Context, *kgo.Client, map[string][]int32) {
+func partitionLost(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(context.Context, *kgo.Client, map[string][]int32) {
 	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {
 			return
@@ -110,10 +110,12 @@ func partitionLost(h *partitionHandler) func(context.Context, *kgo.Client, map[s
 		h.logger.Debug("partition lost", "partitions", partitions)
 
 		h.AddPartitionsLost(partitions)
+
+		fn(WithDLQTriggerSpecPartitions(partitions))
 	}
 }
 
-func partitionRevoked(h *partitionHandler) func(context.Context, *kgo.Client, map[string][]int32) {
+func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(context.Context, *kgo.Client, map[string][]int32) {
 	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {
 			return
@@ -122,5 +124,7 @@ func partitionRevoked(h *partitionHandler) func(context.Context, *kgo.Client, ma
 		h.logger.Debug("partition revoked", "partitions", partitions)
 
 		h.AddPartitionsRevoked(partitions)
+
+		fn(WithDLQTriggerSpecPartitions(partitions))
 	}
 }

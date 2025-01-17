@@ -61,6 +61,20 @@ export const skip = async (topic: string, partition: number, offset: number) => 
   }
 }
 
+export const skipClear = async () => {
+  try {
+    await axios.put(endpoints.skip, {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    addToast('skip clear request sent');
+  } catch (error) {
+    console.error(error);
+    addToast('skip clear request failed', 'alert');
+  }
+}
 
 export const retry = async (topic: string, partition: number, offset: number) => {
   try {

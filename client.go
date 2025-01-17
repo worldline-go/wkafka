@@ -222,8 +222,8 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			kgo.RequireStableFetchOffsets(),
 			kgo.ConsumerGroup(o.ConsumerConfig.GroupID),
 			kgo.ConsumeResetOffset(startOffset),
-			kgo.OnPartitionsLost(partitionLost(partitionH)),
-			kgo.OnPartitionsRevoked(partitionRevoked(partitionH)),
+			kgo.OnPartitionsLost(partitionLost(partitionH, c.DLQRetry)),
+			kgo.OnPartitionsRevoked(partitionRevoked(partitionH, c.DLQRetry)),
 			kgo.WithHooks(c.hook),
 		)
 
