@@ -79,7 +79,7 @@ export const skipClear = async () => {
 export const retry = async (topic: string, partition: number, offset: number) => {
   try {
     await axios.post(endpoints.retryDLQ, {
-      "specs": {
+      "spec": {
         "topic": topic,
         "partition": partition,
         "offset": offset
