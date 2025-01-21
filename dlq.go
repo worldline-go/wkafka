@@ -109,11 +109,19 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 			var errOrgDefault error
 			if ok {
 				errOrgDefault = errOrg.Err
-				errWrapped = wrapErr(r, errOrg.Err, true)
+				// error could be just in index
+				if errOrgDefault == nil && len(errOrg.Indexes) == 1 {
+					for _, err := range errOrg.Indexes {
+						errOrgDefault = err
+
+						break
+					}
+				}
 			} else {
 				errOrgDefault = err
-				errWrapped = wrapErr(r, err, true)
 			}
+
+			errWrapped = wrapErr(r, errOrgDefault, true)
 
 			d.customer.Logger.Error("DLQ process failed", "error", errWrapped, "retry_interval", wait.CurrentInterval().Truncate(time.Second).String())
 
