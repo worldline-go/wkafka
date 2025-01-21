@@ -15,7 +15,7 @@ func producerDLQ(topic string, clientID []byte, fn func(ctx context.Context, rec
 		recordsSend := make([]*kgo.Record, 0, len(records))
 
 		for i, r := range records {
-			errOrg := err.Err
+			errStr := err.Error()
 			if len(err.Indexes) > 0 {
 				errIndex, ok := err.Indexes[i]
 				if !ok {
@@ -23,7 +23,7 @@ func producerDLQ(topic string, clientID []byte, fn func(ctx context.Context, rec
 				}
 
 				if errIndex != nil {
-					errOrg = errIndex
+					errStr = errIndex.Error()
 				}
 			}
 
@@ -34,7 +34,7 @@ func producerDLQ(topic string, clientID []byte, fn func(ctx context.Context, rec
 				Headers: append(
 					r.Headers,
 					kgo.RecordHeader{Key: "process", Value: clientID},
-					kgo.RecordHeader{Key: "error", Value: []byte(errOrg.Error())},
+					kgo.RecordHeader{Key: "error", Value: []byte(errStr)},
 					kgo.RecordHeader{Key: "offset", Value: []byte(strconv.FormatInt(r.Offset, 10))},
 					kgo.RecordHeader{Key: "partition", Value: []byte(strconv.FormatInt(int64(r.Partition), 10))},
 					kgo.RecordHeader{Key: "topic", Value: []byte(r.Topic)},

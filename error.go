@@ -41,6 +41,22 @@ func (e *DLQError) Error() string {
 	return "DLQ indexed error"
 }
 
+func (e *DLQError) Unwrap() error {
+	if e.Err == nil {
+		return ErrDLQ
+	}
+
+	if errors.Is(e.Err, ErrDLQ) {
+		return e.Err
+	}
+
+	return errors.Join(e.Err, ErrDLQ)
+}
+
+func (e *DLQError) IsZero() bool {
+	return e.Err == nil && len(e.Indexes) == 0
+}
+
 func WrapErrDLQ(err error) *DLQError {
 	return &DLQError{Err: err}
 }

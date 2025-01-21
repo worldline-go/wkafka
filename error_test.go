@@ -1,6 +1,7 @@
 package wkafka
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -133,5 +134,19 @@ func Test_isDQLError(t *testing.T) {
 				t.Errorf("isDQLError() = %v, want %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func Test_isErr(t *testing.T) {
+	err := errors.New("testing")
+
+	checkErr := WrapErrDLQ(fmt.Errorf("some error: %w", err))
+
+	if !errors.Is(checkErr, err) {
+		t.Errorf("isErr() = %v, want %v", false, true)
+	}
+
+	if !errors.Is(checkErr, ErrDLQ) {
+		t.Errorf("isErr() = %v, want %v", false, true)
 	}
 }
