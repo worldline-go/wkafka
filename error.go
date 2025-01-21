@@ -33,16 +33,16 @@ type DLQError struct {
 	Indexes map[int]error
 }
 
-func WrapErrDLQ(err error) *DLQError {
-	return &DLQError{Err: err}
-}
-
 func (e *DLQError) Error() string {
 	if e.Err != nil {
 		return e.Err.Error()
 	}
 
 	return "DLQ indexed error"
+}
+
+func WrapErrDLQ(err error) *DLQError {
+	return &DLQError{Err: err}
 }
 
 // IsDQLError check if error is DLQ error and return it.
