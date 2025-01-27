@@ -60,7 +60,33 @@ func CtxRecordBatch(ctx context.Context) []*Record {
 		return nil
 	}
 
-	record, _ := ctx.Value(KeyRecord).([]*Record)
+	records, _ := ctx.Value(KeyRecord).([]*Record)
 
-	return record
+	return records
+}
+
+// CtxRecordWithIndex returns the *Record from the context in callback function.
+//   - If the context is nil, or the Record is not set, nil is returned.
+//   - This is only used in callback function.
+func CtxRecordWithIndex(ctx context.Context, index int) *Record {
+	if ctx == nil {
+		return nil
+	}
+
+	if isDLQ, _ := ctx.Value(KeyIsDLQProcess).(bool); isDLQ {
+		record, _ := ctx.Value(KeyRecord).(*Record)
+
+		return record
+	}
+
+	records, _ := ctx.Value(KeyRecord).([]*Record)
+	if records != nil {
+		if index < 0 || index >= len(records) {
+			return nil
+		}
+
+		return records[index]
+	}
+
+	return nil
 }
