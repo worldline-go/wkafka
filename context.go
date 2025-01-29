@@ -39,7 +39,7 @@ func CtxIsDLQEnabled(ctx context.Context) bool {
 
 // CtxRecord returns the *Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
-//   - This is only used in callback function.
+//   - This is only used in callback function if not batch.
 //   - Don't edit the returned *Record!
 func CtxRecord(ctx context.Context) *Record {
 	if ctx == nil {
@@ -53,7 +53,7 @@ func CtxRecord(ctx context.Context) *Record {
 
 // CtxRecordBatch returns the []*Record from the context in callback function.
 //   - If the context is nil, or the Record is not set, nil is returned.
-//   - This is only used in batch callback function.
+//   - This is only used in batch callback function if it is batch.
 //   - Don't edit the returned []*Record!
 func CtxRecordBatch(ctx context.Context) []*Record {
 	if ctx == nil {
