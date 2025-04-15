@@ -24,7 +24,7 @@ jobs:
     - name: Run tests
       run: |
         GOPATH="$(dirname ${PWD})" golangci-lint run --out-format checkstyle --issues-exit-code=0 ./... > golangci-lint-report.out
-        go test -short -coverprofile=coverage.out -json ./... > test-report.out
+        go test -coverprofile=coverage.out -json ./... > test-report.out
     - name: SonarCloud Scan
       uses: sonarsource/sonarcloud-github-action@master
       with:
