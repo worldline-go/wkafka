@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/worldline-go/test/container/containerkafka"
+	"github.com/worldline-go/test/utils/kafkautils"
+
 	"github.com/worldline-go/wkafka"
-	"github.com/worldline-go/wkafka/tkafka"
 )
 
 type Data struct {
@@ -18,13 +19,14 @@ type Data struct {
 }
 
 func (d Data) ProduceHook(r *wkafka.Record) {
-	r.Key = []byte(fmt.Sprint(d.Test))
+	r.Key = fmt.Append(nil, d.Test)
 }
 
 type Processor struct {
 	ClientID string
 	Wait     time.Duration
 	CallBack func(ctx context.Context, msg Data) error
+	T        *testing.T
 }
 
 func (p Processor) SetWait(d time.Duration) Processor {
@@ -38,9 +40,15 @@ func (p Processor) SetClientID(id string) Processor {
 	return p
 }
 
+func (p Processor) SetTesting(t *testing.T) Processor {
+	p.T = t
+
+	return p
+}
+
 func (p Processor) Process(ctx context.Context, msg Data) error {
 	record := wkafka.CtxRecord(ctx)
-	slog.Info("callback", slog.String("client_id", p.ClientID), slog.Any("test", msg.Test), slog.String("topic", record.Topic), slog.String("key", string(record.Key)))
+	p.T.Log("callback", "client_id", p.ClientID, "test", msg.Test, "topic", record.Topic, "key", string(record.Key))
 
 	if p.Wait > 0 {
 		select {
@@ -96,28 +104,19 @@ func Test_GroupConsuming(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	client, err := tkafka.TestClient()
-	if err != nil {
-		t.Fatalf("TestClient() error = %v", err)
-	}
+	container := containerkafka.New(t)
+	defer container.Stop(t)
 
-	defer client.Close()
+	ctx := t.Context()
 
-	slog.Info("client connected")
-
-	ctx := context.Background()
-
-	gen := tkafka.NewGenerate(client)
-	defer gen.Cleanup()
-
-	topic := tkafka.Topic{Name: "test_group_consuming", Partitions: 3}
-	if _, err := gen.CreateTopics(ctx, topic); err != nil {
+	topic := kafkautils.Topic{Name: "test_group_consuming", Partitions: 3}
+	if _, err := container.CreateTopics(ctx, topic); err != nil {
 		t.Fatalf("CreateTopics() error = %v", err)
 	}
 
-	slog.Info("topic created", slog.String("topic", topic.Name))
+	t.Log("topic created topic", topic.Name)
 
-	byteProducer, err := wkafka.NewProducer[Data](client, topic.Name)
+	byteProducer, err := wkafka.NewProducer[Data](container.Client, topic.Name)
 	if err != nil {
 		t.Fatalf("NewProducer() error = %v", err)
 	}
@@ -210,11 +209,11 @@ func Test_GroupConsuming(t *testing.T) {
 		t.Fatalf("Produce() error = %v", err)
 	}
 
-	slog.Info("all messages produced")
+	t.Log("all messages produced")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			counter.Reset()
@@ -239,10 +238,10 @@ func Test_GroupConsuming(t *testing.T) {
 
 			clients := make([]clientHold, 0, len(tt.consumers))
 			for _, c := range tt.consumers {
-				process := p.SetWait(c.MessageWait).SetClientID(c.ClientID)
+				process := p.SetWait(c.MessageWait).SetClientID(c.ClientID).SetTesting(t)
 				client, err := wkafka.New(
 					ctx,
-					tkafka.Config(),
+					container.Config,
 					wkafka.WithClientID(c.ClientID),
 					wkafka.WithAppName(c.AppName),
 					wkafka.WithConsumer(c.Config),
@@ -252,17 +251,17 @@ func Test_GroupConsuming(t *testing.T) {
 				}
 
 				defer func(clientID string) {
-					slog.Info("client closing", slog.String("client_id", clientID))
+					t.Log("client closing", "client_id", clientID)
 					client.Close()
 				}(c.ClientID)
 
-				slog.Info(
+				t.Log(
 					"client created",
-					slog.String("client_id", c.ClientID),
-					slog.String("group_id", c.Config.GroupID),
-					slog.Any("topics", c.Config.Topics),
-					slog.Duration("wait", c.Wait),
-					slog.Duration("message_wait", c.MessageWait),
+					"client_id", c.ClientID,
+					"group_id", c.Config.GroupID,
+					"topics", c.Config.Topics,
+					"wait", c.Wait,
+					"message_wait", c.MessageWait,
 				)
 
 				clients = append(clients, clientHold{
@@ -283,21 +282,21 @@ func Test_GroupConsuming(t *testing.T) {
 					case <-ctx.Done():
 						return
 					case <-time.After(cPass.Wait):
-						slog.Info("finish wait", slog.Duration("wait", cPass.Wait), slog.String("client_id", cPass.ClientID))
+						t.Log("finish wait", "wait", cPass.Wait, "client_id", cPass.ClientID)
 					}
 
-					slog.Info("start consuming", slog.String("client_id", cPass.ClientID))
+					t.Log("start consuming", "client_id", cPass.ClientID)
 					if err := cPass.Client.Consume(ctx, wkafka.WithCallback(cPass.Process)); err != nil && !errors.Is(err, context.Canceled) {
 						t.Errorf("Consume() error = %v", err)
 					}
 				}(c)
 			}
 
-			slog.Info("wait for consuming")
+			t.Log("wait for consuming")
 			wg.Wait()
 
 			for k, v := range counter.Map {
-				slog.Info("count", slog.Int("key", k), slog.Int64("value", v))
+				t.Log("count", "key", k, "value", v)
 				if v != 1 && k != 0 {
 					t.Errorf("invalid count: %d", v)
 				}

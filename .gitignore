@@ -2,3 +2,4 @@
 /.golangci.yml
 /coverage.*
 /*.out
+/go.work*

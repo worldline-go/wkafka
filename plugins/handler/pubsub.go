@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/worldline-go/conn/connredis"
 	"github.com/worldline-go/wkafka"
 )
 
@@ -19,11 +20,11 @@ type pubsub interface {
 type PubSubConfig struct {
 	Prefix string `cfg:"prefix" json:"prefix"`
 
-	Redis *RedisConfig `cfg:"redis" json:"redis"`
+	Redis connredis.Config `cfg:"redis" json:"redis"`
 }
 
 func (c *PubSubConfig) New(id string, logger wkafka.Logger) (pubsub, error) {
-	if c.Redis != nil {
+	if len(c.Redis.Address) > 0 {
 		return newRedis(c.Redis, c.Prefix+id, logger)
 	}
 
@@ -121,15 +122,8 @@ func (h *Handler) PublishDelete(ctx context.Context) error {
 
 // //////////////////////////////
 
-type RedisConfig struct {
-	Address  string           `cfg:"address"  json:"address"`
-	Username string           `cfg:"username" json:"username"`
-	Password string           `cfg:"password" json:"password"`
-	TLS      wkafka.TLSConfig `cfg:"tls"      json:"tls"`
-}
-
 type Redis struct {
-	client *redis.Client
+	client redis.UniversalClient
 	topic  string
 	log    wkafka.Logger
 }
@@ -142,20 +136,13 @@ func (r *redisLogger) Printf(_ context.Context, format string, v ...interface{})
 	r.log.Warn(fmt.Sprintf(format, v...))
 }
 
-func newRedis(r *RedisConfig, topic string, logger wkafka.Logger) (*Redis, error) {
-	tlsConfig, err := r.TLS.Generate()
+func newRedis(r connredis.Config, topic string, logger wkafka.Logger) (*Redis, error) {
+	redis.SetLogger(&redisLogger{log: logger})
+
+	client, err := connredis.New(r)
 	if err != nil {
 		return nil, err
 	}
-
-	redis.SetLogger(&redisLogger{log: logger})
-
-	client := redis.NewClient(&redis.Options{
-		Addr:      r.Address,
-		Username:  r.Username,
-		Password:  r.Password,
-		TLSConfig: tlsConfig,
-	})
 
 	return &Redis{
 		client: client,
