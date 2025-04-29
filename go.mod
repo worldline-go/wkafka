@@ -14,7 +14,7 @@ require (
 	github.com/worldline-go/conn v0.1.1
 	github.com/worldline-go/logz v0.5.1
 	github.com/worldline-go/struct2 v1.3.1
-	github.com/worldline-go/test v0.3.1
+	github.com/worldline-go/test v0.3.3
 	golang.org/x/sync v0.13.0
 )
 

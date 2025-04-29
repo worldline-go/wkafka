@@ -69,7 +69,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 			return nil, fmt.Errorf("validate config: %w", err)
 		}
 
-		if !o.ConsumerConfig.DLQ.Disabled {
+		if !o.ConsumerConfig.DLQ.ConsumerDisabled {
 			o.ConsumerDLQEnabled = true
 		}
 	}

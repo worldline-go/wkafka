@@ -56,11 +56,16 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 
 	if !consumerConfig.DLQ.Disabled && consumerConfig.DLQ.Topic == "" && c.FormatDLQTopic == "" {
 		consumerConfig.DLQ.Disabled = true
-		logger.Warn("dlq is disabled because topic and format_dlq_topic is not set")
+		logger.Warn("dlq produce is disabled because topic and format_dlq_topic is not set")
+	}
+
+	if !consumerConfig.DLQ.ConsumerDisabled && consumerConfig.DLQ.Topic == "" && c.FormatDLQTopic == "" {
+		consumerConfig.DLQ.ConsumerDisabled = true
+		logger.Warn("dlq consumer is disabled because topic and format_dlq_topic is not set")
 	}
 
 	// add default topic name for DLQ
-	if !consumerConfig.DLQ.Disabled {
+	if !consumerConfig.DLQ.Disabled || !consumerConfig.DLQ.ConsumerDisabled {
 		if consumerConfig.DLQ.Topic == "" {
 			if c.FormatDLQTopic == "" {
 				return fmt.Errorf("format_dlq_topic is required if dlq topic is not set")

@@ -53,11 +53,14 @@ type ConsumerConfig struct {
 }
 
 type DLQConfig struct {
-	// Disabled is a flag to disable DLQ.
+	// Disabled is a flag to disable DLQ producer.
 	//  - Default is false.
 	//  - If topic is not set, it will be generated from format_dlq_topic.
 	//  - If topic and format_dlq_topic is not set, dlq will be disabled!
 	Disabled bool `cfg:"disabled" json:"disabled"`
+	// ConsumerDisabled is a flag to disable DLQ consumer (not producer).
+	//  - Default is false.
+	ConsumerDisabled bool `cfg:"consumer_disabled" json:"consumer_disabled"`
 	// RetryInterval is a time interval to retry again of DLQ messages.
 	// - Default is 10 seconds.
 	RetryInterval time.Duration `cfg:"retry_interval" json:"retry_interval"`
@@ -164,7 +167,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			PartitionHandler: o.Client.partitionHandler,
 		}
 
-		if o.ConsumerConfig.DLQ.Disabled {
+		if o.ConsumerConfig.DLQ.ConsumerDisabled {
 			return nil
 		}
 
@@ -210,7 +213,7 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			PartitionHandler: o.Client.partitionHandler,
 		}
 
-		if o.ConsumerConfig.DLQ.Disabled {
+		if o.ConsumerConfig.DLQ.ConsumerDisabled {
 			return nil
 		}
 

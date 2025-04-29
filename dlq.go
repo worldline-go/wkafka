@@ -118,7 +118,8 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
 					}
 				}
 			} else {
-				errOrgDefault = err
+				// fail listening DLQ, if it is not DLQ error
+				return err
 			}
 
 			errWrapped = wrapErr(r, errOrgDefault, true)

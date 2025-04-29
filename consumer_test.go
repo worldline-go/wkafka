@@ -4,15 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
 	"github.com/worldline-go/test/container/containerkafka"
 	"github.com/worldline-go/test/utils/kafkautils"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/worldline-go/wkafka"
 )
+
+type ConsumerSuite struct {
+	suite.Suite
+	container *containerkafka.Container
+}
+
+func (s *ConsumerSuite) SetupSuite() {
+	s.container = containerkafka.New(s.T())
+}
+
+func TestConsumer(t *testing.T) {
+	suite.Run(t, new(ConsumerSuite))
+}
+
+func (s *ConsumerSuite) TearDownSuite() {
+	s.container.Stop(s.T())
+}
 
 type Data struct {
 	Test int `json:"test"`
@@ -99,26 +119,19 @@ func (c *Counter[T]) Count(ctx context.Context, msg T) error {
 	return nil
 }
 
-func Test_GroupConsuming(t *testing.T) {
+func (s *ConsumerSuite) GroupConsuming() {
 	if testing.Short() {
-		t.Skip("skipping test in short mode")
+		s.T().Skip("skipping test in short mode")
 	}
-
-	container := containerkafka.New(t)
-	defer container.Stop(t)
-
-	ctx := t.Context()
 
 	topic := kafkautils.Topic{Name: "test_group_consuming", Partitions: 3}
-	if _, err := container.CreateTopics(ctx, topic); err != nil {
-		t.Fatalf("CreateTopics() error = %v", err)
-	}
+	s.container.CreateTopics(s.T(), topic)
 
-	t.Log("topic created topic", topic.Name)
+	s.T().Log("topic created topic", topic.Name)
 
-	byteProducer, err := wkafka.NewProducer[Data](container.Client, topic.Name)
+	byteProducer, err := wkafka.NewProducer[Data](s.container.Client, topic.Name)
 	if err != nil {
-		t.Fatalf("NewProducer() error = %v", err)
+		s.T().Fatalf("NewProducer() error = %v", err)
 	}
 
 	counter := Counter[int]{
@@ -194,7 +207,7 @@ func Test_GroupConsuming(t *testing.T) {
 		},
 	}
 
-	if err := byteProducer.Produce(ctx, []Data{
+	if err := byteProducer.Produce(s.T().Context(), []Data{
 		{Test: 1},
 		{Test: 2},
 		{Test: 3},
@@ -206,13 +219,13 @@ func Test_GroupConsuming(t *testing.T) {
 		{Test: 9},
 		{Test: 0},
 	}...); err != nil {
-		t.Fatalf("Produce() error = %v", err)
+		s.T().Fatalf("Produce() error = %v", err)
 	}
 
-	t.Log("all messages produced")
+	s.T().Log("all messages produced")
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		s.T().Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
@@ -241,7 +254,7 @@ func Test_GroupConsuming(t *testing.T) {
 				process := p.SetWait(c.MessageWait).SetClientID(c.ClientID).SetTesting(t)
 				client, err := wkafka.New(
 					ctx,
-					container.Config,
+					s.container.Config,
 					wkafka.WithClientID(c.ClientID),
 					wkafka.WithAppName(c.AppName),
 					wkafka.WithConsumer(c.Config),
@@ -303,4 +316,122 @@ func Test_GroupConsuming(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (s *ConsumerSuite) TestConsumerDLQ() {
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+
+	testMessages := []any{
+		[]byte("test-message-1"),
+		[]byte("test-message-2"),
+		[]byte("test-message-3"),
+		[]byte("test-message-4"),
+		[]byte("test-message-5"),
+		[]byte("test-message-6"),
+	}
+	s.container.Publish(s.T(), testName, testMessages...)
+
+	// ////////////////////////////////////////////////////////////////////////////////////
+	// Main consumer
+	// ////////////////////////////////////////////////////////////////////////////////////
+
+	lMain, err := wkafka.New(
+		s.T().Context(), s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: "test-group",
+			Topics:  []string{testName},
+			DLQ: wkafka.DLQConfig{
+				ConsumerDisabled: true,
+				Topic:            testName + "-dlq",
+			},
+		}),
+	)
+	s.NoError(err)
+
+	errFail := errors.New("fail error")
+
+	lMainConsumeTimes := 5
+	lMainFunc := func(ctx context.Context, message []byte) error {
+		lMainConsumeTimes--
+		s.T().Log("callback", "message", string(message))
+		if lMainConsumeTimes < 0 {
+			s.Fail("too many messages")
+			return nil
+		}
+
+		switch string(message) {
+		case "test-message-1":
+			return wkafka.ErrDLQ
+		case "test-message-2":
+			return nil
+		case "test-message-3":
+			return wkafka.WrapErrDLQ(fmt.Errorf("test error"))
+		case "test-message-4":
+			return wkafka.WrapErrDLQ(fmt.Errorf("test error"))
+		case "test-message-5":
+			return errFail
+		case "test-message-6":
+			return wkafka.WrapErrDLQ(fmt.Errorf("test error"))
+		default:
+			s.Fail("unexpected message")
+			return nil
+		}
+	}
+
+	// ////////////////////////////////////////////////////////////////////////////////////
+	// DLQ consumer
+	// ////////////////////////////////////////////////////////////////////////////////////
+
+	lDLQ, err := wkafka.New(
+		s.T().Context(), s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: "test-group",
+			DLQ: wkafka.DLQConfig{
+				Topic: testName + "-dlq",
+			},
+		}),
+	)
+	s.NoError(err)
+
+	lDLQConsumeTimes := 3
+	lDLQFunc := func(ctx context.Context, message []byte) error {
+		lDLQConsumeTimes--
+		s.T().Log("callback", "message", string(message))
+		if lDLQConsumeTimes < 0 {
+			s.Fail("too many messages")
+			return nil
+		}
+
+		s.Equal(testName+"-dlq", wkafka.CtxRecord(ctx).Topic)
+
+		switch string(message) {
+		case "test-message-1":
+			return nil
+		case "test-message-3":
+			return nil
+		case "test-message-4":
+			return errFail
+		default:
+			s.Fail("unexpected message")
+			return nil
+		}
+	}
+
+	errGroup, ctx := errgroup.WithContext(s.T().Context())
+	errGroup.Go(func() error {
+		err := lMain.Consume(ctx, wkafka.WithCallback(lMainFunc))
+		s.ErrorIs(err, errFail)
+		return nil
+	})
+
+	errGroup.Go(func() error {
+		err := lDLQ.Consume(ctx, wkafka.WithCallback(lDLQFunc))
+		s.ErrorIs(err, errFail)
+		return nil
+	})
+
+	s.NoError(errGroup.Wait())
+
+	s.Equal(lMainConsumeTimes, 0, "main consumer consume times")
+	s.Equal(lDLQConsumeTimes, 0, "dlq consumer consume times")
 }
