@@ -54,6 +54,7 @@ func (d *dlqProcess[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) e
 	if d.customer.PreCheck != nil {
 		if err := d.customer.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {
+				d.customer.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 				return nil
 			}
 
@@ -64,6 +65,7 @@ func (d *dlqProcess[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) e
 	data, err := d.customer.Decode(r.Value, r)
 	if err != nil {
 		if errors.Is(err, ErrSkip) {
+			d.customer.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 			return nil
 		}
 

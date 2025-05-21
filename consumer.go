@@ -50,6 +50,25 @@ type ConsumerConfig struct {
 	BatchCount int `cfg:"batch_count" json:"batch_count"`
 	// DLQ is a dead letter queue configuration.
 	DLQ DLQConfig `cfg:"dlq" json:"dlq"`
+
+	// Decoder has options for internal decoder.
+	//  - Use json.Unmarshal.
+	//  - If you want to use custom decoder, set the Decode function in the WithDecode option.
+	Decoder Decoder `cfg:"decoder" json:"decoder"`
+}
+
+type Decoder struct {
+	// SkipInvalid is a flag to skip invalid messages.
+	//  - Default is true.
+	SkipInvalid *bool `cfg:"skip_invalid" json:"skip_invalid"`
+}
+
+func (d Decoder) GetSkipInvalid() bool {
+	if d.SkipInvalid == nil {
+		return true
+	}
+
+	return *d.SkipInvalid
 }
 
 type DLQConfig struct {
@@ -245,7 +264,9 @@ func getDecodeProduceDLQ[T any](o *optionConsumer) (func(raw []byte, r *kgo.Reco
 	case []byte:
 		decode = codecByte[T]{}.Decode
 	default:
-		decode = codecJSON[T]{}.Decode
+		decode = codecJSON[T]{
+			SkipInvalid: o.ConsumerConfig.Decoder.GetSkipInvalid(),
+		}.Decode
 	}
 
 	var produceDLQ func(ctx context.Context, err *DLQError, records []*kgo.Record) error

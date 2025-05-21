@@ -46,16 +46,21 @@ func compressionVerify(c []string) error {
 
 // Codec is use to marshal/unmarshal data to bytes.
 
-type codecJSON[T any] struct{}
+type codecJSON[T any] struct {
+	SkipInvalid bool
+}
 
 func (codecJSON[T]) Encode(data T) ([]byte, error) {
 	return json.Marshal(data)
 }
 
-func (codecJSON[T]) Decode(raw []byte, _ *kgo.Record) (T, error) {
+func (c codecJSON[T]) Decode(raw []byte, _ *kgo.Record) (T, error) {
 	var data T
-	err := json.Unmarshal(raw, &data)
-	if err != nil {
+	if err := json.Unmarshal(raw, &data); err != nil {
+		if c.SkipInvalid {
+			return data, fmt.Errorf("json decoder invalid data: %w; %w", err, ErrSkip)
+		}
+
 		return data, err
 	}
 

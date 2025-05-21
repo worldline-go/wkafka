@@ -224,6 +224,7 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			kgo.ConsumeResetOffset(startOffset),
 			kgo.OnPartitionsLost(partitionLost(partitionH, c.DLQRetry)),
 			kgo.OnPartitionsRevoked(partitionRevoked(partitionH, c.DLQRetry)),
+			kgo.OnPartitionsAssigned(partitionsAssigned(partitionH)),
 			kgo.WithHooks(c.hook),
 		)
 
@@ -469,4 +470,16 @@ func (c *Client) DLQTopics() []string {
 
 func (c *Client) AppName() string {
 	return c.appName
+}
+
+func (c *Client) Ping() error {
+	if c.Kafka == nil {
+		return errors.New("kafka client is nil")
+	}
+
+	if err := c.Kafka.Ping(c.hook.ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

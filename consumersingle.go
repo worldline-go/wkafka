@@ -137,6 +137,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	if c.PreCheck != nil {
 		if err := c.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {
+				c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 				return nil
 			}
 
@@ -147,6 +148,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	data, err := c.Decode(r.Value, r)
 	if err != nil {
 		if errors.Is(err, ErrSkip) {
+			c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 			return nil
 		}
 

@@ -107,7 +107,7 @@ func partitionLost(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(con
 			return
 		}
 
-		h.logger.Debug("partition lost", "partitions", partitions)
+		h.logger.Info("partition lost", "partitions", partitions)
 
 		h.AddPartitionsLost(partitions)
 
@@ -121,10 +121,20 @@ func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(
 			return
 		}
 
-		h.logger.Debug("partition revoked", "partitions", partitions)
+		h.logger.Info("partition revoked", "partitions", partitions)
 
 		h.AddPartitionsRevoked(partitions)
 
 		fn(WithDLQTriggerSpecPartitions(partitions))
+	}
+}
+
+func partitionsAssigned(h *partitionHandler) func(context.Context, *kgo.Client, map[string][]int32) {
+	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
+		if len(partitions) == 0 {
+			return
+		}
+
+		h.logger.Info("partitions assigned", "partitions", partitions)
 	}
 }
