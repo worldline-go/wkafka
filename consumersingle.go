@@ -42,6 +42,7 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
+		// c.Logger.Info("fetched")
 		if err := c.iteration(ctx, cl, fetch); err != nil {
 			return err
 		}
@@ -57,6 +58,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 		r := iter.Next()
 		// check partition is revoked
 		if c.PartitionHandler.IsRevokedRecord(r) {
+			// c.Logger.Info("pre partition revoked, skip commit", "record", r)
 			continue
 		}
 
@@ -90,6 +92,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			// callback function need to be awere of getting same message again and just need skip it without error
 			// also error is ok due to it will be push in DLQ
 			if c.PartitionHandler.IsRevokedRecord(r) {
+				// c.Logger.Info("partition revoked, skip commit", "record", r)
 				continue
 			}
 		}

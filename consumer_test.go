@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/suite"
+	"github.com/worldline-go/logz"
 	"github.com/worldline-go/test/container/containerkafka"
 	"github.com/worldline-go/test/utils/kafkautils"
 	"golang.org/x/sync/errgroup"
@@ -434,4 +436,147 @@ func (s *ConsumerSuite) TestConsumerDLQ() {
 
 	s.Equal(lMainConsumeTimes, 0, "main consumer consume times")
 	s.Equal(lDLQConsumeTimes, 0, "dlq consumer consume times")
+}
+
+func (s *ConsumerSuite) TestConsumerRebalance() {
+	s.T().Skip("skipping test, it is flaky")
+
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, testName)
+
+	testMessages := []any{
+		wkafka.Record{
+			Value:     []byte("test-part-0-1"),
+			Partition: 0,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-0-2"),
+			Partition: 0,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-0-3"),
+			Partition: 0,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-1-1"),
+			Partition: 1,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-1-2"),
+			Partition: 1,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-1-3"),
+			Partition: 1,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-2-1"),
+			Partition: 2,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-2-2"),
+			Partition: 2,
+		},
+		wkafka.Record{
+			Value:     []byte("test-part-2-3"),
+			Partition: 2,
+		},
+	}
+	s.container.Publish(s.T(), testName, testMessages...)
+
+	// ////////////////////////////////////////////////////////////////////////////////////
+	// Main consumer
+	// ////////////////////////////////////////////////////////////////////////////////////
+
+	// errFail := errors.New("fail error")
+
+	kafka1Process := func(ctx context.Context, message []byte) error {
+		switch string(message) {
+		// case "test-part-1-2":
+		// 	return fmt.Errorf("kafka-1 message [%s]: %w", string(message), errFail)
+		default:
+			s.T().Log("kafka-1", "message", string(message))
+			time.Sleep(5 * time.Second) // Simulate long processing
+			s.T().Log("kafka-1", "processed", string(message))
+			return nil
+		}
+	}
+
+	kafka2Process := func(ctx context.Context, message []byte) error {
+		switch string(message) {
+		// case "test-part-1-2":
+		// 	return fmt.Errorf("kafka-2 message [%s]: %w", string(message), errFail)
+		default:
+			s.T().Log("kafka-2", "message", string(message))
+			time.Sleep(3 * time.Second) // Simulate long processing
+			s.T().Log("kafka-2", "processed", string(message))
+			return nil
+		}
+	}
+
+	errGroup, ctx := errgroup.WithContext(s.T().Context())
+	errGroup.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			logger := log.With().Str("consumer", "kafka-1").Logger()
+			kafka1, err := wkafka.New(
+				ctx, s.container.Config,
+				wkafka.WithConsumer(wkafka.ConsumerConfig{
+					GroupID: "test-group-rebalance",
+					Topics:  []string{testName},
+				}),
+				wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+			)
+			s.NoError(err)
+
+			err = kafka1.Consume(ctx, wkafka.WithCallback(kafka1Process))
+			s.T().Logf("consume error: %v", err)
+
+			kafka1.Close()
+
+			time.Sleep(5 * time.Second)
+		}
+	})
+
+	errGroup.Go(func() error {
+		time.Sleep(10 * time.Second) // Ensure kafka-1 starts first
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+
+			logger := log.With().Str("consumer", "kafka-2").Logger()
+			kafka2, err := wkafka.New(
+				ctx, s.container.Config,
+				wkafka.WithConsumer(wkafka.ConsumerConfig{
+					GroupID: "test-group-rebalance",
+					Topics:  []string{testName},
+					DLQ: wkafka.DLQConfig{
+						ConsumerDisabled: true,
+						Topic:            testName + "-dlq",
+					},
+				}),
+				wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+			)
+			s.NoError(err)
+
+			err = kafka2.Consume(ctx, wkafka.WithCallback(kafka2Process))
+			s.T().Logf("consume error: %v", err)
+
+			kafka2.Close()
+
+			time.Sleep(5 * time.Second)
+		}
+	})
+
+	s.NoError(errGroup.Wait())
 }
