@@ -28,10 +28,18 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 		// flush the partition handler, it will be ready next poll
 		c.PartitionHandler.Flush()
 
+		// if block on poll then allow rebalance
+		cl.AllowRebalance()
+
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
 			return errClientClosed
 		}
+
+		// debug purpose
+		// fetch.EachRecord(func(r *kgo.Record) {
+		// 	c.Logger.Info("fetched record", "partition", r.Partition, "value", r.Value)
+		// })
 
 		if err := fetch.Err(); err != nil {
 			return fmt.Errorf("poll fetch err: %w", err)
@@ -42,7 +50,7 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		// c.Logger.Info("fetched")
+		c.Logger.Info("fetched")
 		if err := c.iteration(ctx, cl, fetch); err != nil {
 			return err
 		}

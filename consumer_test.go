@@ -444,45 +444,32 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
 	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, testName)
 
-	testMessages := []any{
-		wkafka.Record{
-			Value:     []byte("test-part-0-1"),
-			Partition: 0,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-0-2"),
-			Partition: 0,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-0-3"),
-			Partition: 0,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-1-1"),
-			Partition: 1,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-1-2"),
-			Partition: 1,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-1-3"),
-			Partition: 1,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-2-1"),
-			Partition: 2,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-2-2"),
-			Partition: 2,
-		},
-		wkafka.Record{
-			Value:     []byte("test-part-2-3"),
-			Partition: 2,
-		},
-	}
-	s.container.Publish(s.T(), testName, testMessages...)
+	errGroup, ctx := errgroup.WithContext(s.T().Context())
+
+	errGroup.Go(func() error {
+		index := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			index++
+
+			testMessages := []any{}
+			for i := 1; i <= 3; i++ {
+				testMessages = append(testMessages, wkafka.Record{
+					Value:     []byte(fmt.Sprintf("test-part-%d-%d", index%3, i*index)),
+					Partition: int32(index % 3),
+				})
+			}
+
+			s.container.Publish(s.T(), testName, testMessages...)
+
+			time.Sleep(20 * time.Second) // Wait for messages to be produced
+		}
+	})
 
 	// ////////////////////////////////////////////////////////////////////////////////////
 	// Main consumer
@@ -496,7 +483,7 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 		// 	return fmt.Errorf("kafka-1 message [%s]: %w", string(message), errFail)
 		default:
 			s.T().Log("kafka-1", "message", string(message))
-			time.Sleep(5 * time.Second) // Simulate long processing
+			time.Sleep(2 * time.Minute) // Simulate long processing
 			s.T().Log("kafka-1", "processed", string(message))
 			return nil
 		}
@@ -508,13 +495,12 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 		// 	return fmt.Errorf("kafka-2 message [%s]: %w", string(message), errFail)
 		default:
 			s.T().Log("kafka-2", "message", string(message))
-			time.Sleep(3 * time.Second) // Simulate long processing
+			time.Sleep(2 * time.Second) // Simulate long processing
 			s.T().Log("kafka-2", "processed", string(message))
 			return nil
 		}
 	}
 
-	errGroup, ctx := errgroup.WithContext(s.T().Context())
 	errGroup.Go(func() error {
 		for {
 			select {
@@ -527,8 +513,9 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 			kafka1, err := wkafka.New(
 				ctx, s.container.Config,
 				wkafka.WithConsumer(wkafka.ConsumerConfig{
-					GroupID: "test-group-rebalance",
-					Topics:  []string{testName},
+					GroupID:        "test-group-rebalance",
+					Topics:         []string{testName},
+					MaxPollRecords: 4,
 				}),
 				wkafka.WithLogger(logz.AdapterKV{Log: logger}),
 			)
@@ -545,8 +532,8 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 
 	errGroup.Go(func() error {
 		time.Sleep(10 * time.Second) // Ensure kafka-1 starts first
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
+		// ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		// defer cancel()
 		for {
 			select {
 			case <-ctx.Done():

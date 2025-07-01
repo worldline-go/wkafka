@@ -23,7 +23,9 @@ type options struct {
 	ConsumerEnabled    bool
 	ConsumerDLQEnabled bool
 	ConsumerConfig     *ConsumerConfig
+
 	// Consumer          consumer
+
 	ClientID          string
 	KGOOptions        []kgo.Opt
 	KGOOptionsDLQ     []kgo.Opt

@@ -16,7 +16,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var ErrConnection = errors.New("connect to kafka brokers failed")
+var (
+	ErrConnection = errors.New("connect to kafka brokers failed")
+
+	// DefaultBlockRebalanceTimeout is the default timeout for blocking rebalance.
+	DefaultBlockRebalanceTimeout = 60 * time.Second
+)
 
 type Client struct {
 	Kafka               *kgo.Client
@@ -237,6 +242,15 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(topics...))
 			c.dlqTopics = topics
 		} else {
+			if o.ConsumerConfig.BlockRebalance != nil && *o.ConsumerConfig.BlockRebalance {
+				blockRebalanceTimout := o.ConsumerConfig.BlockRebalanceTimeout
+				if blockRebalanceTimout == 0 {
+					blockRebalanceTimout = DefaultBlockRebalanceTimeout
+				}
+
+				kgoOpt = append(kgoOpt, kgo.BlockRebalanceOnPoll(), kgo.RebalanceTimeout(blockRebalanceTimout))
+			}
+
 			kgoOpt = append(kgoOpt, kgo.ConsumeTopics(o.ConsumerConfig.Topics...))
 			c.topics = o.ConsumerConfig.Topics
 		}

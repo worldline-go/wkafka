@@ -28,6 +28,9 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 		// flush the partition handler, it will be ready next poll
 		c.PartitionHandler.Flush()
 
+		// if block on poll then allow rebalance
+		cl.AllowRebalance()
+
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
 			return errClientClosed
