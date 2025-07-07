@@ -66,7 +66,7 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	// get the batch count but not more than the number of records
 	batchCount := c.Cfg.BatchCount
-	if v := fetch.NumRecords(); v < c.Cfg.BatchCount {
+	if v := fetch.NumRecords(); v < batchCount {
 		batchCount = v
 	}
 
@@ -99,10 +99,11 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 			if err := c.PreCheck(ctx, r); err != nil {
 				if errors.Is(err, ErrSkip) {
 					c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+
 					continue
 				}
 
-				return fmt.Errorf("pre check failed: %w", err)
+				return fmt.Errorf("pre check failed: %w", wrapErr(r, err, false))
 			}
 		}
 
@@ -110,10 +111,11 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 		if err != nil {
 			if errors.Is(err, ErrSkip) {
 				c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+
 				continue
 			}
 
-			return fmt.Errorf("decode record failed: %w", err)
+			return fmt.Errorf("decode record failed: %w", wrapErr(r, err, false))
 		}
 		/////////////////////////////////
 
@@ -155,13 +157,15 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 
 		if len(records) != 0 {
 			if err := cl.CommitRecords(ctx, records...); err != nil {
-				return fmt.Errorf("commit batch records failed: %w", err)
+				return fmt.Errorf("commit batch records failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
 			}
 		}
 
-		batch = make([]T, 0, batchCount)
-		batchRecords = make([]*kgo.Record, 0, batchCount)
-		records = make([]*kgo.Record, 0, batchCount)
+		// Instead of allocating new slices, reuse the existing slices by reslicing to zero length.
+		// This avoids unnecessary allocations and keeps the underlying arrays.
+		batch = batch[:0]
+		batchRecords = batchRecords[:0]
+		records = records[:0]
 	}
 
 	return nil

@@ -68,9 +68,15 @@ skip: # this is programatically skip, kafka will still consume the message
         - 31
         - 90
       before: 20 # skip all offsets before or equal to this offset
-# max records to consume per poll, 0 is default value from kafka usually 500
-# no need to touch most of the time, but batch consume's count max is max_poll_records
-max_poll_records: 0 
+# max records to consume per poll, 0 is default value which is not checking
+# use this option with block_rebalance
+max_poll_records: 0
+# flag to block rebalance while pulled messages on process
+# use with block_rebalance_timeout and max_poll_records
+block_rebalance: false
+# only works with block_rebalance option
+# DLQ consumer does not use block rebalance
+block_rebalance_timeout: 60s # timeout to block rebalance, default is 60 seconds
 # max records to consume per batch to give callback function, default is 100
 # if this value is more than max_poll_records then max_poll_records will be used
 batch_count: 100

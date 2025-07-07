@@ -82,6 +82,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 					// above check also skip others on that partition
 					continue
 				}
+
 				return wrapErr(r, err, c.IsDLQ)
 			} else {
 				c.Meter.Meter(start, 1, r.Topic, nil, true)
@@ -90,6 +91,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 			// listening main topics
 			if err := c.iterationMain(ctx, r); err != nil {
 				c.Meter.Meter(start, 1, r.Topic, err, false)
+
 				return wrapErr(r, err, c.IsDLQ)
 			} else {
 				c.Meter.Meter(start, 1, r.Topic, nil, false)
@@ -149,6 +151,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 		if err := c.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {
 				c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+
 				return nil
 			}
 
@@ -160,6 +163,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	if err != nil {
 		if errors.Is(err, ErrSkip) {
 			c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+
 			return nil
 		}
 

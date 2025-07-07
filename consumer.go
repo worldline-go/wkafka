@@ -62,7 +62,7 @@ type ConsumerConfig struct {
 	//  - Set MaxPollRecords option to show how many messages can handle in a single poll.
 	BlockRebalance *bool `cfg:"block_rebalance" json:"block_rebalance"`
 	// BlockRebalanceTimeout is a timeout to block rebalance.
-	//  - Only works with WithBlockRebalance option.
+	//  - Only works with BlockRebalance.
 	//  - Default is 60 seconds.
 	//  - DLQ consumer does not use block rebalance.
 	BlockRebalanceTimeout time.Duration `cfg:"block_rebalance_timeout" json:"block_rebalance_timeout"`
