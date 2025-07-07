@@ -40,7 +40,7 @@ type ConsumerConfig struct {
 	//      before: 20 // skip all offsets before or equal to this offset
 	Skip map[string]map[int32]OffsetConfig `cfg:"skip" json:"skip"`
 	// MaxPollRecords is the maximum number of records returned in a single call to poll.
-	//  - Default is max.poll.records in the broker configuration, usually 500.
+	//  - max.poll.records, default not set.
 	//  - Fetching messages from broker, this is not related with batch processing!
 	MaxPollRecords int `cfg:"max_poll_records" json:"max_poll_records"`
 	// BatchCount is a number of messages processed in a single batch.
@@ -58,7 +58,8 @@ type ConsumerConfig struct {
 
 	// BlockRebalance is a flag to block rebalance while pulling messages.
 	//  - Default is false.
-	//  - Also check BlockRebalanceTimeout option.
+	//  - Set BlockRebalanceTimeout option.
+	//  - Set MaxPollRecords option to show how many messages can handle in a single poll.
 	BlockRebalance *bool `cfg:"block_rebalance" json:"block_rebalance"`
 	// BlockRebalanceTimeout is a timeout to block rebalance.
 	//  - Only works with WithBlockRebalance option.
