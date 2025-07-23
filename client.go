@@ -28,6 +28,7 @@ type Client struct {
 	KafkaDLQ            *kgo.Client
 	partitionHandler    *partitionHandler
 	partitionHandlerDLQ *partitionHandler
+	consumerGroup       *group
 
 	clientID       []byte
 	consumerConfig *ConsumerConfig
@@ -49,7 +50,6 @@ type Client struct {
 	brokers   []string
 	dlqTopics []string
 	topics    []string
-	meter     Meter
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
@@ -79,15 +79,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		}
 	}
 
-	if o.Meter == nil {
-		o.Meter = noopMeter()
-	}
-
 	c := &Client{
 		consumerConfig: o.ConsumerConfig,
 		logger:         o.Logger,
 		clientID:       []byte(o.ClientID),
-		meter:          o.Meter,
 		hook: &hooker{
 			ctx: context.Background(),
 		},
@@ -222,6 +217,20 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 			partitionH = c.partitionHandler
 		}
 
+		// create concurrent group
+		if !isDLQ {
+			groupType, err := groupTypeFromString(o.ConsumerConfig.Concurrent.Type)
+			if err != nil {
+				return nil, fmt.Errorf("invalid concurrent type: %w", err)
+			}
+
+			c.consumerGroup = &group{
+				Type:      groupType,
+				BatchSize: o.ConsumerConfig.Concurrent.Process,
+				MinSize:   o.ConsumerConfig.Concurrent.MinSize,
+			}
+		}
+
 		kgoOpt = append(kgoOpt,
 			kgo.DisableAutoCommit(),
 			kgo.RequireStableFetchOffsets(),
@@ -304,7 +313,6 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	o := optionConsumer{
 		Client:         c,
 		ConsumerConfig: c.consumerConfig,
-		Meter:          c.meter,
 	}
 
 	opts = append([]OptionConsumer{OptionConsumer(callback)}, opts...)
@@ -321,7 +329,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	if c.KafkaDLQ == nil {
 		c.hook.setCtx(ctx)
 
-		c.logger.Info("wkafka start consuming", "topics", c.topics)
+		c.logger.Info("wkafka start consuming", "topics", c.topics, "concurrency", c.consumerConfig.Concurrent.Enabled)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume %v: %w", c.topics, err)
 		}
@@ -331,13 +339,12 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 
 	// consume main and dlq concurrently
 	g, ctx := errgroup.WithContext(ctx)
-
 	ctx = context.WithValue(ctx, KeyIsDLQEnabled, true)
 
 	c.hook.setCtx(ctx)
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming", "topics", c.topics)
+		c.logger.Info("wkafka start consuming", "topics", c.topics, "concurrency", c.consumerConfig.Concurrent.Enabled)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume %v: %w", c.topics, err)
 		}

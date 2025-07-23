@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/oklog/ulid/v2 v2.1.0
+	github.com/oklog/ulid/v2 v2.1.1
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.10.0

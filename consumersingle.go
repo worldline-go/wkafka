@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"golang.org/x/sync/errgroup"
 )
 
 type consumerSingle[T any] struct {
@@ -15,6 +15,7 @@ type consumerSingle[T any] struct {
 	// Process is nil for DLQ consumer.
 	Process          func(ctx context.Context, msg T) error
 	IsDLQ            bool
+	Group            groupRecords
 	PartitionHandler *partitionHandler
 	DLQProcess       *dlqProcess[T]
 }
@@ -36,11 +37,6 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			return errClientClosed
 		}
 
-		// debug purpose
-		// fetch.EachRecord(func(r *kgo.Record) {
-		// 	c.Logger.Info("fetched record", "partition", r.Partition, "value", r.Value)
-		// })
-
 		if err := fetch.Err(); err != nil {
 			return fmt.Errorf("poll fetch err: %w", err)
 		}
@@ -50,7 +46,22 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 			continue
 		}
 
-		c.Logger.Info("fetched")
+		if c.IsDLQ {
+			if err := c.DLQProcess.Iteration(ctx, cl, fetch); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		if c.Cfg.Concurrent.Enabled && c.Cfg.Concurrent.Process > 1 {
+			if err := c.iterationConcurrent(ctx, cl, fetch); err != nil {
+				return err
+			}
+
+			continue
+		}
+
 		if err := c.iteration(ctx, cl, fetch); err != nil {
 			return err
 		}
@@ -61,50 +72,84 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - ITERATION
 ////////////////////
 
+func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+	for iter := fetch.RecordIter(); !iter.Done(); {
+		r := iter.Next()
+		// check partition is revoked if not then add to group
+		if !c.PartitionHandler.IsRevokedRecord(r) {
+			c.Group.Add(r)
+		}
+
+		if !iter.Done() && !c.Group.IsEnough() {
+			continue
+		}
+
+		errGroup, ctxGroup := errgroup.WithContext(ctx)
+		errGroup.SetLimit(c.Cfg.Concurrent.Process)
+
+		c.Group.Merge()
+		for records := range c.Group.Iter() {
+			if c.Group.IsSingle() {
+				for _, record := range records {
+					errGroup.Go(func() error {
+						if err := c.iterationMain(ctxGroup, record); err != nil {
+							return wrapErr(record, err, c.IsDLQ)
+						}
+
+						return nil
+					})
+				}
+			} else {
+				errGroup.Go(func() error {
+					for _, record := range records {
+						if err := c.iterationMain(ctxGroup, record); err != nil {
+							return wrapErr(record, err, c.IsDLQ)
+						}
+					}
+
+					return nil
+				})
+			}
+		}
+
+		if err := errGroup.Wait(); err != nil {
+			return fmt.Errorf("wait group failed: %w", err)
+		}
+
+		// commit all records in group
+		records := c.Group.AllRecords()
+		records, _ = c.PartitionHandler.IsRevokedRecordBatch(records)
+		if len(records) != 0 {
+			if err := cl.CommitRecords(ctx, records...); err != nil {
+				return fmt.Errorf("commit batch records failed: %w; offsets: %s", err, errorOffsetList(records))
+			}
+		}
+
+		c.Group.Reset()
+	}
+
+	return nil
+}
+
 func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		// check partition is revoked
 		if c.PartitionHandler.IsRevokedRecord(r) {
-			// c.Logger.Info("pre partition revoked, skip commit", "record", r)
 			continue
 		}
 
-		start := time.Now()
-		if c.IsDLQ {
-			// listening DLQ topics
-			// check partition is revoked and not commit it!
-			// when error return than it will not be committed
-			if err := c.DLQProcess.Iteration(ctx, r); err != nil {
-				c.Meter.Meter(start, 1, r.Topic, err, true)
-				if errors.Is(err, errPartitionRevoked) {
-					// don't commit revoked partition
-					// above check also skip others on that partition
-					continue
-				}
+		// listening main topics
+		if err := c.iterationMain(ctx, r); err != nil {
+			return wrapErr(r, err, c.IsDLQ)
+		}
 
-				return wrapErr(r, err, c.IsDLQ)
-			} else {
-				c.Meter.Meter(start, 1, r.Topic, nil, true)
-			}
-		} else {
-			// listening main topics
-			if err := c.iterationMain(ctx, r); err != nil {
-				c.Meter.Meter(start, 1, r.Topic, err, false)
-
-				return wrapErr(r, err, c.IsDLQ)
-			} else {
-				c.Meter.Meter(start, 1, r.Topic, nil, false)
-			}
-
-			// maybe working on that record is too long and partition is revoked
-			// not commit it, mess up the commit offest
-			// callback function need to be awere of getting same message again and just need skip it without error
-			// also error is ok due to it will be push in DLQ
-			if c.PartitionHandler.IsRevokedRecord(r) {
-				// c.Logger.Info("partition revoked, skip commit", "record", r)
-				continue
-			}
+		// maybe working on that record is too long and partition is revoked
+		// not commit it, mess up the commit offest
+		// callback function need to be awere of getting same message again and just need skip it without error
+		// also error is ok due to it will be push in DLQ
+		if c.PartitionHandler.IsRevokedRecord(r) {
+			continue
 		}
 
 		// commit if not see any error
@@ -142,7 +187,7 @@ func (c *consumerSingle[T]) iterationMain(ctx context.Context, r *kgo.Record) er
 
 func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) error {
 	if c.Skip(c.Cfg, r) {
-		c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
+		c.Logger.Debug("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
 
 		return nil
 	}
@@ -150,7 +195,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	if c.PreCheck != nil {
 		if err := c.PreCheck(ctx, r); err != nil {
 			if errors.Is(err, ErrSkip) {
-				c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+				c.Logger.Debug("record skipped on precheck", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 
 				return nil
 			}
@@ -162,7 +207,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	data, err := c.Decode(r.Value, r)
 	if err != nil {
 		if errors.Is(err, ErrSkip) {
-			c.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+			c.Logger.Debug("record skipped on decode", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 
 			return nil
 		}

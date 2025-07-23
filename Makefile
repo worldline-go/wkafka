@@ -27,7 +27,7 @@ ci-run: ## Run CI in local with act
 
 .PHONY: lint
 lint: ## Lint Go files
-	golangci-lint--version
+	golangci-lint --version
 	GOPATH="$(shell dirname $(PWD))" golangci-lint run ./...
 
 .PHONY: test

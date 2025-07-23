@@ -37,7 +37,8 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 				},
 			},
 			want: ConsumerConfig{
-				GroupID: "finops_test",
+				GroupID:    "finops_test",
+				BatchCount: DefaultBatchCount,
 				Skip: map[string]map[int32]OffsetConfig{
 					"finops_serviceX_dlq": nil,
 				},
@@ -45,6 +46,12 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 					Topic:            "finops_serviceX_dlq",
 					RetryInterval:    DefaultRetryInterval,
 					RetryMaxInterval: DefaultRetryMaxInterval,
+				},
+				Concurrent: ConcurrentConfig{
+					Enabled: false,
+					MinSize: 1,
+					Process: 10,
+					Type:    groupTypeKey.String(),
 				},
 			},
 		},

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -566,4 +567,218 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 	})
 
 	s.NoError(errGroup.Wait())
+}
+
+func (s *ConsumerSuite) TestConsumerConcurrentKey() {
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, testName)
+
+	messages := []any{
+		wkafka.Record{Value: []byte("test-part-1-1"), Partition: -1, Key: []byte("key-1")},
+		wkafka.Record{Value: []byte("test-part-2-1"), Partition: -1, Key: []byte("key-2")},
+		wkafka.Record{Value: []byte("test-part-1-2"), Partition: -1, Key: []byte("key-1")},
+		wkafka.Record{Value: []byte("test-part-1-3"), Partition: -1, Key: []byte("key-1")},
+	}
+
+	s.container.Publish(s.T(), testName, messages...)
+
+	var countKey1 atomic.Int64
+	var countKey2 atomic.Int64
+
+	var totalCount atomic.Int64
+	total := len(messages)
+	ctx, cancel := context.WithCancel(s.T().Context())
+
+	process := func(ctx context.Context, message []byte) error {
+		r := wkafka.CtxRecord(ctx)
+		switch string(r.Key) {
+		case "key-1":
+			v := countKey1.Add(1)
+			switch string(message) {
+			case "test-part-1-1":
+				if v != 1 {
+					s.T().Errorf("unexpected count for key-1: %d", v)
+				}
+			case "test-part-1-2":
+				if v != 2 {
+					s.T().Errorf("unexpected count for key-1: %d", v)
+				}
+			case "test-part-1-3":
+				if v != 3 {
+					s.T().Errorf("unexpected count for key-1: %d", v)
+				}
+			default:
+				s.T().Errorf("unexpected message for key-1: %s", string(message))
+			}
+		case "key-2":
+			v := countKey2.Add(1)
+			switch string(message) {
+			case "test-part-2-1":
+				if v != 1 {
+					s.T().Errorf("unexpected count for key-2: %d", v)
+				}
+			default:
+				s.T().Errorf("unexpected message for key-2: %s", string(message))
+			}
+		default:
+			s.T().Errorf("unexpected key: %s", string(r.Key))
+		}
+
+		s.T().Log("callback", "key", string(r.Key), "message", string(message))
+
+		if v := totalCount.Add(1) == int64(total); v {
+			cancel()
+		}
+
+		return nil
+	}
+
+	logger := log.With().Str("consumer", "kafka-concurrent-key").Logger()
+	kafka, err := wkafka.New(
+		ctx, s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: "test-group-concurrent",
+			Topics:  []string{testName},
+			Concurrent: wkafka.ConcurrentConfig{
+				Enabled: true,
+				Type:    wkafka.GroupTypeKeyStr,
+			},
+		}),
+		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+	)
+	s.NoError(err)
+
+	err = kafka.Consume(ctx, wkafka.WithCallback(process))
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *ConsumerSuite) TestConsumerConcurrentPartition() {
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, testName)
+
+	messages := []any{
+		wkafka.Record{Value: []byte("test-part-1-1"), Partition: 1, Key: []byte("key-1")},
+		wkafka.Record{Value: []byte("test-part-2-1"), Partition: 2, Key: []byte("key-2")},
+		wkafka.Record{Value: []byte("test-part-1-2"), Partition: 1, Key: []byte("key-3")},
+		wkafka.Record{Value: []byte("test-part-1-3"), Partition: 1, Key: []byte("key-4")},
+	}
+
+	s.container.Publish(s.T(), testName, messages...)
+
+	var countPartition1 atomic.Int64
+	var countPartition2 atomic.Int64
+
+	var totalCount atomic.Int64
+	total := len(messages)
+	ctx, cancel := context.WithCancel(s.T().Context())
+
+	process := func(ctx context.Context, message []byte) error {
+		r := wkafka.CtxRecord(ctx)
+		switch r.Partition {
+		case 1:
+			v := countPartition1.Add(1)
+			switch string(message) {
+			case "test-part-1-1":
+				if v != 1 {
+					s.T().Errorf("unexpected count for partition-1: [%d] %s", v, string(message))
+				}
+			case "test-part-1-2":
+				if v != 2 {
+					s.T().Errorf("unexpected count for partition-1: [%d] %s", v, string(message))
+				}
+			case "test-part-1-3":
+				if v != 3 {
+					s.T().Errorf("unexpected count for partition-1: [%d] %s", v, string(message))
+				}
+			default:
+				s.T().Errorf("unexpected message for partition-1: %s", string(message))
+			}
+		case 2:
+			v := countPartition2.Add(1)
+			switch string(message) {
+			case "test-part-2-1":
+				if v != 1 {
+					s.T().Errorf("unexpected count for partition-2: [%d] %s", v, string(message))
+				}
+			default:
+				s.T().Errorf("unexpected message for partition-2: %s", string(message))
+			}
+		default:
+			s.T().Errorf("unexpected partition: %d", r.Partition)
+		}
+
+		s.T().Log("callback", "partition", r.Partition, "message", string(message))
+
+		if v := totalCount.Add(1) == int64(total); v {
+			cancel()
+		}
+
+		return nil
+	}
+
+	logger := log.With().Str("consumer", "kafka-concurrent-partition").Logger()
+	kafka, err := wkafka.New(
+		ctx, s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: "test-group-concurrent",
+			Topics:  []string{testName},
+			Concurrent: wkafka.ConcurrentConfig{
+				Enabled: true,
+				Type:    wkafka.GroupTypePartitionStr,
+			},
+		}),
+		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+	)
+	s.NoError(err)
+
+	err = kafka.Consume(ctx, wkafka.WithCallback(process))
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *ConsumerSuite) TestConsumerConcurrentMix() {
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, testName)
+
+	messages := []any{
+		wkafka.Record{Value: []byte("test-part-1-1"), Partition: 0, Key: []byte("key-1")},
+		wkafka.Record{Value: []byte("test-part-2-1"), Partition: 2, Key: []byte("key-2")},
+		wkafka.Record{Value: []byte("test-part-1-2"), Partition: 1, Key: []byte("key-3")},
+		wkafka.Record{Value: []byte("test-part-1-3"), Partition: 1, Key: []byte("key-4")},
+	}
+
+	s.container.Publish(s.T(), testName, messages...)
+
+	var totalCount atomic.Int64
+	total := len(messages)
+	ctx, cancel := context.WithCancel(s.T().Context())
+
+	process := func(ctx context.Context, message []byte) error {
+		r := wkafka.CtxRecord(ctx)
+
+		s.T().Log("callback", "partition", r.Partition, "key", r.Key, "message", string(message))
+
+		if v := totalCount.Add(1) == int64(total); v {
+			cancel()
+		}
+
+		return nil
+	}
+
+	logger := log.With().Str("consumer", "kafka-concurrent-mix").Logger()
+	kafka, err := wkafka.New(
+		ctx, s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: "test-group-concurrent",
+			Topics:  []string{testName},
+			Concurrent: wkafka.ConcurrentConfig{
+				Enabled: true,
+				Type:    wkafka.GroupTypeMixStr,
+			},
+		}),
+		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+	)
+	s.NoError(err)
+
+	err = kafka.Consume(ctx, wkafka.WithCallback(process))
+	s.ErrorIs(err, context.Canceled)
 }

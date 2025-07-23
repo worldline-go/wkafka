@@ -97,6 +97,26 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 		}
 	}
 
+	if consumerConfig.BatchCount <= 0 {
+		consumerConfig.BatchCount = DefaultBatchCount
+	}
+
+	// //////////////////////
+	// concurrent group
+	if consumerConfig.Concurrent.MinSize <= 0 {
+		consumerConfig.Concurrent.MinSize = 1
+	}
+
+	if consumerConfig.Concurrent.Process <= 0 {
+		consumerConfig.Concurrent.Process = 10
+	}
+
+	if consumerConfig.Concurrent.Type == "" {
+		consumerConfig.Concurrent.Type = groupTypeKey.String()
+	}
+
+	// //////////////////////
+
 	if err := c.Validation.Validate(consumerConfig); err != nil {
 		return fmt.Errorf("validate consumer config: %w", err)
 	}

@@ -66,6 +66,32 @@ type ConsumerConfig struct {
 	//  - Default is 60 seconds.
 	//  - DLQ consumer does not use block rebalance.
 	BlockRebalanceTimeout time.Duration `cfg:"block_rebalance_timeout" json:"block_rebalance_timeout"`
+
+	// Concurrent is a configuration for concurrent processing.
+	Concurrent ConcurrentConfig `cfg:"concurrent" json:"concurrent"`
+}
+
+type ConcurrentConfig struct {
+	// Enabled is a flag to enable concurrent processing.
+	//  - Default is false.
+	Enabled bool `cfg:"enabled" json:"enabled"`
+
+	// Process is a number of concurrent goroutines to process messages.
+	//  - Default is 10.
+	Process int `cfg:"process" json:"process"`
+
+	// MinSize is the minimum size of the bucket. Default is 1.
+	//  - Use for 'partition' and 'key' grouping.
+	MinSize int `cfg:"min_size" json:"min_size"`
+
+	// Type is a type of concurrent processing.
+	//  - Default is "key".
+	//
+	// Available options:
+	//    "partition" : Each partition can be processed in a separate goroutine.
+	//    "key"       : Each message with the different key can be processed in a separate goroutine.
+	//    "mix"       : Every message can be processed in a separate goroutine.
+	Type string `cfg:"type" json:"type"`
 }
 
 type Decoder struct {
@@ -137,7 +163,6 @@ type customer[T any] struct {
 	ProduceDLQ func(ctx context.Context, err *DLQError, records []*kgo.Record) error
 	Skip       func(cfg *ConsumerConfig, r *kgo.Record) bool
 	Logger     Logger
-	Meter      Meter
 }
 
 type consumer interface {
@@ -150,7 +175,6 @@ type optionConsumer struct {
 	Consumer       consumer
 	ConsumerDLQ    consumer
 	ConsumerConfig *ConsumerConfig
-	Meter          Meter
 }
 
 type (
@@ -188,13 +212,13 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			Cfg:        o.ConsumerConfig,
 			Skip:       newSkipper(&o.Client.consumerMutex),
 			Logger:     o.Client.logger,
-			Meter:      o.Meter,
 		}
 
 		o.Consumer = &consumerBatch[T]{
 			customer:         &customer,
 			Process:          fn,
 			PartitionHandler: o.Client.partitionHandler,
+			Group:            o.Client.consumerGroup.NewGroup(),
 		}
 
 		if o.ConsumerConfig.DLQ.ConsumerDisabled {
@@ -234,13 +258,13 @@ func WithCallback[T any](fn func(ctx context.Context, msg T) error) CallBackFunc
 			Cfg:        o.ConsumerConfig,
 			Skip:       newSkipper(&o.Client.consumerMutex),
 			Logger:     o.Client.logger,
-			Meter:      o.Meter,
 		}
 
 		o.Consumer = &consumerSingle[T]{
 			customer:         &customer,
 			Process:          fn,
 			PartitionHandler: o.Client.partitionHandler,
+			Group:            o.Client.consumerGroup.NewGroup(),
 		}
 
 		if o.ConsumerConfig.DLQ.ConsumerDisabled {

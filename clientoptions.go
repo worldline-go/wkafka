@@ -31,7 +31,6 @@ type options struct {
 	KGOOptionsDLQ     []kgo.Opt
 	AutoTopicCreation bool
 	Logger            Logger
-	Meter             Meter
 
 	Ping        bool
 	PingRetry   bool
@@ -55,12 +54,6 @@ type Option func(*options)
 func WithClientID(clientID string) Option {
 	return func(o *options) {
 		o.ClientID = clientID
-	}
-}
-
-func WithMeter(m Meter) Option {
-	return func(o *options) {
-		o.Meter = m
 	}
 }
 

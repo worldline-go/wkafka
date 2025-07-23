@@ -56,7 +56,7 @@ func (p *plugin) Add(name string, fn pluginWrapFunc) {
 // Hooks for decoder plugin
 
 // hookTimeDuration for time.Duration
-func hookTimeDuration(in reflect.Type, out reflect.Type, data any) (any, error) {
+func hookTimeDuration(in, out reflect.Type, data any) (any, error) {
 	if out == reflect.TypeFor[time.Duration]() {
 		switch in.Kind() {
 		case reflect.String:

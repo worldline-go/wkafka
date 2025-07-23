@@ -78,8 +78,12 @@ block_rebalance: false
 # DLQ consumer does not use block rebalance
 block_rebalance_timeout: 60s # timeout to block rebalance, default is 60 seconds
 # max records to consume per batch to give callback function, default is 100
-# if this value is more than max_poll_records then max_poll_records will be used
 batch_count: 100
+concurrent:
+  enabled: false # enable concurrent processing of messages
+  process: 10 # max concurrent processing, default is 10
+  min_size: 1 # minimum size of the bucket for merging multiple bucket, default is 1
+  type: "key" # type of grouping records to process, can be "mix", "partition", "key"; default is "key"
 dlq:
   disabled: false # disable dead letter queue
   topic: "" # dead letter topic name, it can be assigned in the kafka config's format_dlq_topic

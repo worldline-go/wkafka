@@ -44,6 +44,36 @@ func newDLQProcess[T any](
 	}
 }
 
+func (d *dlqProcess[T]) Iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+	for iter := fetch.RecordIter(); !iter.Done(); {
+		r := iter.Next()
+		// check partition is revoked
+		if d.isRevokedRecord(r) {
+			continue
+		}
+
+		// listening DLQ topics
+		// check partition is revoked and not commit it!
+		// when error return than it will not be committed
+		if err := d.iteration(ctx, r); err != nil {
+			if errors.Is(err, errPartitionRevoked) {
+				// don't commit revoked partition
+				// above check also skip others on that partition
+				continue
+			}
+
+			return wrapErr(r, err, true)
+		}
+
+		// commit if not see any error
+		if err := cl.CommitRecords(ctx, r); err != nil {
+			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), true)
+		}
+	}
+
+	return nil
+}
+
 func (d *dlqProcess[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) error {
 	if d.customer.Skip(d.customer.Cfg, r) {
 		d.customer.Logger.Info("record skipped", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset)
@@ -83,7 +113,7 @@ func (d *dlqProcess[T]) iterationRecordDLQ(ctx context.Context, r *kgo.Record) e
 
 // Iteration is used to listen DLQ topics, error usually comes from context cancellation.
 // Any kind of error will be retry with interval.
-func (d *dlqProcess[T]) Iteration(ctx context.Context, r *kgo.Record) error {
+func (d *dlqProcess[T]) iteration(ctx context.Context, r *kgo.Record) error {
 	wait := newWaitRetry(d.customer.Cfg.DLQ.RetryInterval, d.customer.Cfg.DLQ.RetryMaxInterval)
 	defer wait.Close()
 
