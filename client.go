@@ -226,8 +226,9 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 
 			c.consumerGroup = &group{
 				Type:      groupType,
-				BatchSize: o.ConsumerConfig.Concurrent.Process,
+				BatchSize: o.ConsumerConfig.BatchCount,
 				MinSize:   o.ConsumerConfig.Concurrent.MinSize,
+				RunSize:   o.ConsumerConfig.Concurrent.RunSize,
 			}
 		}
 

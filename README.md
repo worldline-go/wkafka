@@ -78,11 +78,13 @@ block_rebalance: false
 # DLQ consumer does not use block rebalance
 block_rebalance_timeout: 60s # timeout to block rebalance, default is 60 seconds
 # max records to consume per batch to give callback function, default is 100
+# on concurrent this is the size of the each sub group, also check run_size option
 batch_count: 100
 concurrent:
   enabled: false # enable concurrent processing of messages
   process: 10 # max concurrent processing, default is 10
   min_size: 1 # minimum size of the bucket for merging multiple bucket, default is 1
+  run_size: 0 # size of the group to start processing, default is 0 which means same as batch_count
   type: "key" # type of grouping records to process, can be "mix", "partition", "key"; default is "key"
 dlq:
   disabled: false # disable dead letter queue

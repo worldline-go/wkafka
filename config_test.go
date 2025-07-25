@@ -51,6 +51,7 @@ func TestConsumerPreConfig_Apply(t *testing.T) {
 					Enabled: false,
 					MinSize: 1,
 					Process: 10,
+					RunSize: DefaultBatchCount,
 					Type:    groupTypeKey.String(),
 				},
 			},

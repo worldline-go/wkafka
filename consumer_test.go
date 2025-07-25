@@ -746,6 +746,16 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 		wkafka.Record{Value: []byte("test-part-1-3"), Partition: 1, Key: []byte("key-4")},
 	}
 
+	// messages := make([]any, 0, 1_000_000)
+	// for i := range 1_000_000 {
+	// 	partition := int32(i % 3)
+	// 	messages = append(messages, wkafka.Record{
+	// 		Value:     []byte("test-message-" + fmt.Sprintf("%d-%d", partition, i)),
+	// 		Partition: partition,
+	// 		Key:       []byte("key-" + fmt.Sprintf("%d", i)),
+	// 	})
+	// }
+
 	s.container.Publish(s.T(), testName, messages...)
 
 	var totalCount atomic.Int64
@@ -755,7 +765,8 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 	process := func(ctx context.Context, message []byte) error {
 		r := wkafka.CtxRecord(ctx)
 
-		s.T().Log("callback", "partition", r.Partition, "key", r.Key, "message", string(message))
+		s.T().Log("callback", "partition", r.Partition, "key", string(r.Key), "message", string(message))
+		// time.Sleep(1 * time.Second) // Simulate processing time
 
 		if v := totalCount.Add(1) == int64(total); v {
 			cancel()
@@ -770,9 +781,11 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
 			GroupID: "test-group-concurrent",
 			Topics:  []string{testName},
+			// BatchCount: 20_000,
 			Concurrent: wkafka.ConcurrentConfig{
 				Enabled: true,
 				Type:    wkafka.GroupTypeMixStr,
+				// Process: 100_000,
 			},
 		}),
 		wkafka.WithLogger(logz.AdapterKV{Log: logger}),

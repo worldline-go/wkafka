@@ -84,6 +84,10 @@ type ConcurrentConfig struct {
 	//  - Use for 'partition' and 'key' grouping.
 	MinSize int `cfg:"min_size" json:"min_size"`
 
+	// RunSize is a number of messages to process in a single run.
+	//  - Default is batch_count.
+	RunSize int `cfg:"run_size" json:"run_size"`
+
 	// Type is a type of concurrent processing.
 	//  - Default is "key".
 	//

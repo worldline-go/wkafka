@@ -16,6 +16,10 @@ env-logs: ## Show env logs
 env-down: ## Stop env
 	docker compose -p wkafka down
 
+.PHONY: kafka-console
+kafka-console: ## Start Kafka Console
+	docker run -it --rm --name redpanda --net host -e KAFKA_BROKERS=localhost:9092 -e SERVER_LISTENPORT=7071 docker.io/redpandadata/console:v2.7.2
+
 .PHONY: example
 example: LOG_LEVEL ?= debug
 example: ## Run example

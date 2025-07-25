@@ -115,6 +115,10 @@ func configApply(c ConsumerPreConfig, consumerConfig *ConsumerConfig, progName s
 		consumerConfig.Concurrent.Type = groupTypeKey.String()
 	}
 
+	if consumerConfig.Concurrent.RunSize <= 0 {
+		consumerConfig.Concurrent.RunSize = consumerConfig.BatchCount
+	}
+
 	// //////////////////////
 
 	if err := c.Validation.Validate(consumerConfig); err != nil {

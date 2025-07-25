@@ -10,6 +10,7 @@ type group struct {
 	Type      groupType
 	BatchSize int
 	MinSize   int // Minimum size of the group to process
+	RunSize   int // Number of messages to process in a single run
 }
 
 type groupType int
@@ -73,18 +74,24 @@ type groupRecords interface {
 
 type groupKey struct {
 	size    int
+	runSize int
 	min     int
 	count   int
 	records map[string][]*Record
 }
 
-func newGroupKey(size, min int) *groupKey {
+func newGroupKey(size, runSize, min int) *groupKey {
 	if min <= 0 {
 		min = 1
 	}
 
+	if runSize <= 0 {
+		runSize = size
+	}
+
 	return &groupKey{
 		size:    size,
+		runSize: runSize,
 		min:     min,
 		records: make(map[string][]*Record),
 	}
@@ -101,7 +108,7 @@ func (c *groupKey) Add(r *Record) {
 }
 
 func (c *groupKey) IsEnough() bool {
-	return c.count >= c.size
+	return c.count >= c.runSize
 }
 
 func (c *groupKey) Reset() {
@@ -142,18 +149,24 @@ func (c *groupKey) Merge() {
 
 type groupPartition struct {
 	size    int
+	runSize int
 	min     int
 	count   int
 	records map[int32][]*Record
 }
 
-func newGroupPartition(size, min int) *groupPartition {
+func newGroupPartition(size, runSize, min int) *groupPartition {
 	if min <= 0 {
 		min = 1
 	}
 
+	if runSize <= 0 {
+		runSize = size
+	}
+
 	return &groupPartition{
 		size:    size,
+		runSize: runSize,
 		min:     min,
 		records: make(map[int32][]*Record),
 	}
@@ -168,7 +181,7 @@ func (c *groupPartition) Add(r *Record) {
 }
 
 func (c *groupPartition) IsEnough() bool {
-	return c.count >= c.size
+	return c.count >= c.runSize
 }
 
 func (c *groupPartition) Reset() {
@@ -255,9 +268,9 @@ func (c *groupMix) Merge() {}
 func (c *group) NewGroup() groupRecords {
 	switch c.Type {
 	case groupTypeKey:
-		return newGroupKey(c.BatchSize, c.MinSize)
+		return newGroupKey(c.BatchSize, c.RunSize, c.MinSize)
 	case groupTypePartition:
-		return newGroupPartition(c.BatchSize, c.MinSize)
+		return newGroupPartition(c.BatchSize, c.RunSize, c.MinSize)
 	case groupTypeMix:
 		return newGroupMix(c.BatchSize)
 	default:
