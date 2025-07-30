@@ -207,7 +207,7 @@ func (c *consumerSingle[T]) iterationRecord(ctx context.Context, r *kgo.Record) 
 	data, err := c.Decode(r.Value, r)
 	if err != nil {
 		if errors.Is(err, ErrSkip) {
-			c.Logger.Debug("record skipped on decode", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
+			c.Logger.Info("record skipped on decode", "topic", r.Topic, "partition", r.Partition, "offset", r.Offset, "error", err)
 
 			return nil
 		}
