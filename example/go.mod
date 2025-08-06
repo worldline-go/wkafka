@@ -8,7 +8,7 @@ require (
 	github.com/rakunlabs/into v0.4.0
 	github.com/rakunlabs/logi v0.4.0
 	github.com/rs/zerolog v1.34.0
-	github.com/twmb/franz-go v1.19.4
+	github.com/twmb/franz-go v1.19.5
 	github.com/twmb/franz-go/plugin/kotel v1.5.0
 	github.com/worldline-go/wkafka v0.0.0-00010101000000-000000000000
 )
@@ -23,7 +23,7 @@ require (
 	github.com/lmittmann/tint v1.0.5 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/oklog/ulid/v2 v2.1.0 // indirect
+	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/redis/go-redis/v9 v9.7.3 // indirect
 	github.com/twmb/franz-go/pkg/kadm v1.16.0 // indirect
@@ -38,6 +38,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.33.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 )

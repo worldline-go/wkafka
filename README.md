@@ -131,35 +131,6 @@ Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the e
 
 > Check the aditional options for custom decode and precheck.
 
-
-#### Skip Handler
-
-Editing the skip map and use our handler to initialize server mux.
-
-> `Redis` need for request goes to other instances.
-
-```go
-// import github.com/worldline-go/wkafka/handler
-
-mux := http.NewServeMux()
-mux.Handle(handler.New(ctx, client))
-```
-
-It will serve default on `/wkafka/ui` path.
-
-<details><summary>Handler Example</summary>
-
-```sh
-make env
-
-# run the example
-EXAMPLE=consumer_single_handler make example
-```
-
-Add messages in here to skip the message http://localhost:7071
-
-</details>
-
 ### Producer
 
 Use consumer client or create without consumer settings, `New` also try to connect to brokers.
@@ -185,6 +156,63 @@ if err != nil {
 
 return producer.Produce(ctx, data)
 ```
+
+### Plugins
+
+#### Handler
+
+```go
+import (
+  "github.com/worldline-go/wkafka/handler"
+)
+```
+
+Editing the skip map and use our handler to initialize server mux.
+
+> `Redis` like API with support channel need for request goes to other instances.
+
+In the kafka config add the `plugins` section with `handler` plugin.
+
+```yaml
+plugins:
+  handler:
+    enabled: true # enable plugins
+    addr: ":17070" # address to listen, default is ":17070"
+    pubsub:
+      prefix: "finops_", # prefix for pubsub channels, default is empty
+      redis:
+        address: "localhost:6379" # address for redis like API
+```
+
+Than enable the handler in the kafka client initialization.
+
+```go
+wkafka.WithPlugin(handler.PluginWithName()),
+```
+
+Or you can do it manually:
+
+```go
+// import github.com/worldline-go/wkafka/handler
+
+mux := http.NewServeMux()
+mux.Handle(handler.New(ctx, client, handler.Config{}.ToOption()))
+```
+
+It will serve default on `/wkafka/ui` path.
+
+<details><summary>Handler Example</summary>
+
+```sh
+make env
+
+# run the example
+EXAMPLE=consumer_single_handler make example
+```
+
+Add messages in here to skip the message http://localhost:7071
+
+</details>
 
 ### Telemetry
 
