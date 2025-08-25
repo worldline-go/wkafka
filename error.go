@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -31,6 +32,8 @@ type DLQError struct {
 	// Indexes to use send specific batch index to DLQ.
 	// If index's error is nil, default error is used.
 	Indexes map[int]error
+
+	m sync.Mutex
 }
 
 func (e *DLQError) Error() string {
@@ -55,6 +58,18 @@ func (e *DLQError) Unwrap() error {
 
 func (e *DLQError) IsZero() bool {
 	return e.Err == nil && len(e.Indexes) == 0
+}
+
+// SetIndex for adding index error concurrently.
+func (e *DLQError) SetIndex(index int, err error) {
+	e.m.Lock()
+	defer e.m.Unlock()
+
+	if e.Indexes == nil {
+		e.Indexes = make(map[int]error)
+	}
+
+	e.Indexes[index] = err
 }
 
 func WrapErrDLQ(err error) *DLQError {
