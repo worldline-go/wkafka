@@ -1,8 +1,9 @@
-on: [push]
-
 name: Test
+
+on: [push, pull_request]
+
 jobs:
-  sonarcloud:
+  test:
     runs-on: ubuntu-latest
     steps:
     - name: get repository name
@@ -12,13 +13,20 @@ jobs:
         # Disabling shallow clone is recommended for improving relevancy of reporting
         fetch-depth: 0
     - uses: actions/setup-go@v4
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
       with:
-        args: --timeout 5m --new-from-rev=HEAD~1 --issues-exit-code=0
+        go-version: '1.24' # The Go version to download (if necessary) and use.
+    - name: Install dependencies
+      run: |
+        go mod download
+    - name: download golangci.yml
+      run: |
+        [[ ! -f ".golangci.yml" ]] && curl -kfsSL -O https://raw.githubusercontent.com/worldline-go/guide/main/lint/.golangci.yml || true
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v8
+      with:
+        args: --issues-exit-code 0 --output.checkstyle.path ${{ github.workspace }}/golangci-lint-report.out ./...
     - name: Run tests
       run: |
-        GOPATH="$(dirname ${PWD})" golangci-lint run --out-format checkstyle --issues-exit-code=0 ./... > golangci-lint-report.out
         go test -coverprofile=coverage.out -json ./... > test-report.out
     - name: SonarCloud Scan
       uses: sonarsource/sonarcloud-github-action@master
