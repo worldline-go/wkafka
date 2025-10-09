@@ -84,33 +84,35 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 			continue
 		}
 
-		errGroup, ctxGroup := errgroup.WithContext(ctx)
-		errGroup.SetLimit(c.Cfg.Concurrent.Process)
+	errGroup, ctxGroup := errgroup.WithContext(ctx)
+	errGroup.SetLimit(c.Cfg.Concurrent.Process)
 
-		c.Group.Merge()
-		for records := range c.Group.Iter() {
-			if c.Group.IsSingle() {
-				for _, record := range records {
-					errGroup.Go(func() error {
-						if err := c.iterationMain(ctxGroup, record); err != nil {
-							return wrapErr(record, err, c.IsDLQ)
-						}
-
-						return nil
-					})
-				}
-			} else {
+	c.Group.Merge()
+	for records := range c.Group.Iter() {
+		if c.Group.IsSingle() {
+			for _, record := range records {
+				record := record // capture loop variable
 				errGroup.Go(func() error {
-					for _, record := range records {
-						if err := c.iterationMain(ctxGroup, record); err != nil {
-							return wrapErr(record, err, c.IsDLQ)
-						}
+					if err := c.iterationMain(ctxGroup, record); err != nil {
+						return wrapErr(record, err, c.IsDLQ)
 					}
 
 					return nil
 				})
 			}
+		} else {
+			records := records // capture loop variable
+			errGroup.Go(func() error {
+				for _, record := range records {
+					if err := c.iterationMain(ctxGroup, record); err != nil {
+						return wrapErr(record, err, c.IsDLQ)
+					}
+				}
+
+				return nil
+			})
 		}
+	}
 
 		if err := errGroup.Wait(); err != nil {
 			return fmt.Errorf("wait group failed: %w", err)

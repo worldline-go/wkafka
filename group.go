@@ -177,6 +177,7 @@ func (c *groupPartition) Add(r *Record) {
 		c.records[r.Partition] = make([]*Record, 0, c.size)
 	}
 
+	c.count++
 	c.records[r.Partition] = append(c.records[r.Partition], r)
 }
 

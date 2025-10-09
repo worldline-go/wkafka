@@ -85,53 +85,54 @@ func (c *consumerBatch[T]) batchIterationConcurrent(ctx context.Context, cl *kgo
 			continue
 		}
 
-		errGroup, ctxGroup := errgroup.WithContext(ctx)
-		errGroup.SetLimit(c.Cfg.Concurrent.Process)
+	errGroup, ctxGroup := errgroup.WithContext(ctx)
+	errGroup.SetLimit(c.Cfg.Concurrent.Process)
 
-		c.Group.Merge()
-		for records := range c.Group.Iter() {
-			errGroup.Go(func() error {
-				batch := make([]T, 0, len(records))
-				batchRecords := make([]*kgo.Record, 0, len(records))
+	c.Group.Merge()
+	for records := range c.Group.Iter() {
+		records := records // capture loop variable
+		errGroup.Go(func() error {
+			batch := make([]T, 0, len(records))
+			batchRecords := make([]*kgo.Record, 0, len(records))
 
-				for _, record := range records {
-					// skip precheck and record section
-					/////////////////////////////////
-					data, skip, err := c.batchRecord(ctxGroup, record)
-					if err != nil {
-						return err
-					}
-
-					if !skip {
-						// add to batch if record is not skipped
-						batch = append(batch, data)
-						batchRecords = append(batchRecords, record)
-					}
-				}
-
+			for _, record := range records {
+				// skip precheck and record section
 				/////////////////////////////////
-				ctxCallback := context.WithValue(ctxGroup, KeyRecord, batchRecords)
-				if err := c.Process(ctxCallback, batch); err != nil {
-					errOrg, ok := IsDQLError(err)
-					if !ok {
-						// it is not DLQ error, return it
-						// this will fail the service
-						return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
-					}
-
-					if c.ProduceDLQ != nil {
-						if err := c.ProduceDLQ(ctxGroup, errOrg, batchRecords); err != nil {
-							return fmt.Errorf("produce to DLQ failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
-						}
-					} else {
-						// returning a batch error could be confusing
-						return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
-					}
+				data, skip, err := c.batchRecord(ctxGroup, record)
+				if err != nil {
+					return err
 				}
 
-				return nil
-			})
-		}
+				if !skip {
+					// add to batch if record is not skipped
+					batch = append(batch, data)
+					batchRecords = append(batchRecords, record)
+				}
+			}
+
+			/////////////////////////////////
+			ctxCallback := context.WithValue(ctxGroup, KeyRecord, batchRecords)
+			if err := c.Process(ctxCallback, batch); err != nil {
+				errOrg, ok := IsDQLError(err)
+				if !ok {
+					// it is not DLQ error, return it
+					// this will fail the service
+					return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
+				}
+
+				if c.ProduceDLQ != nil {
+					if err := c.ProduceDLQ(ctxGroup, errOrg, batchRecords); err != nil {
+						return fmt.Errorf("produce to DLQ failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
+					}
+				} else {
+					// returning a batch error could be confusing
+					return fmt.Errorf("process batch failed: %w; offsets: %s", err, errorOffsetList(batchRecords))
+				}
+			}
+
+			return nil
+		})
+	}
 
 		if err := errGroup.Wait(); err != nil {
 			return fmt.Errorf("wait group failed: %w", err)
