@@ -795,3 +795,82 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 	err = kafka.Consume(ctx, wkafka.WithCallback(process))
 	s.ErrorIs(err, context.Canceled)
 }
+
+func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
+	topic1, topic2, topic3 := "multi-test-1", "multi-test-2", "multi-test-3"
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic1)
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic2)
+	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic3)
+
+	messages1 := make([]any, 0, 50)
+	for i := range 10 {
+		partition := int32(i % 3)
+		messages1 = append(messages1, wkafka.Record{
+			Value:     []byte("1-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
+			Partition: partition,
+			Key:       []byte("key-" + fmt.Sprintf("%d", i)),
+		})
+	}
+
+	messages2 := make([]any, 0, 50)
+	for i := range 10 {
+		partition := int32(i % 3)
+		messages2 = append(messages2, wkafka.Record{
+			Value:     []byte("2-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
+			Partition: partition,
+			Key:       []byte("key-" + fmt.Sprintf("%d", i)),
+		})
+	}
+
+	messages3 := make([]any, 0, 50)
+	for i := range 10 {
+		partition := int32(i % 3)
+		messages3 = append(messages3, wkafka.Record{
+			Value:     []byte("3-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
+			Partition: partition,
+			Key:       []byte("key-" + fmt.Sprintf("%d", i)),
+		})
+	}
+
+	s.container.Publish(s.T(), topic1, messages1...)
+	s.container.Publish(s.T(), topic2, messages2...)
+	s.container.Publish(s.T(), topic3, messages3...)
+
+	var totalCount atomic.Int64
+	total := len(messages1) + len(messages2) + len(messages3)
+	ctx, cancel := context.WithCancel(s.T().Context())
+
+	process := func(ctx context.Context, message []byte) error {
+		r := wkafka.CtxRecord(ctx)
+
+		s.T().Log("callback", "partition", r.Partition, "key", string(r.Key), "message", string(message))
+		// time.Sleep(1 * time.Second) // Simulate processing time
+
+		if v := totalCount.Add(1) == int64(total); v {
+			cancel()
+		}
+
+		return nil
+	}
+
+	logger := log.With().Str("consumer", "kafka-concurrent-mix-multi").Logger()
+	kafka, err := wkafka.New(
+		ctx, s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID:    "test-group-concurrent-multi",
+			Topics:     []string{topic1, topic2, topic3},
+			BatchCount: 2000,
+			Concurrent: wkafka.ConcurrentConfig{
+				Enabled: true,
+				Type:    wkafka.GroupTypeMixStr,
+				Process: 20,
+			},
+		}),
+		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+	)
+
+	s.NoError(err)
+
+	err = kafka.Consume(ctx, wkafka.WithCallback(process))
+	s.ErrorIs(err, context.Canceled)
+}

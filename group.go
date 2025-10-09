@@ -272,7 +272,7 @@ func (c *group) NewGroup() groupRecords {
 	case groupTypePartition:
 		return newGroupPartition(c.BatchSize, c.RunSize, c.MinSize)
 	case groupTypeMix:
-		return newGroupMix(c.BatchSize)
+		return newGroupMix(c.RunSize)
 	default:
 		panic("unknown concurrent type: " + strconv.Itoa(int(c.Type)))
 	}

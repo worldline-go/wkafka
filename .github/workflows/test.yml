@@ -12,11 +12,6 @@ jobs:
         # Disabling shallow clone is recommended for improving relevancy of reporting
         fetch-depth: 0
     - uses: actions/setup-go@v4
-      with:
-        go-version: '1.24' # The Go version to download (if necessary) and use.
-    - name: download golangci.yml
-      run: |
-        [[ ! -f ".golangci.yml" ]] && curl -kfsSL -O https://raw.githubusercontent.com/worldline-go/guide/main/lint/.golangci.yml || true
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:

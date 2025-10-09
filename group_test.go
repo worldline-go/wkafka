@@ -2,8 +2,13 @@ package wkafka
 
 import (
 	"bytes"
+	"fmt"
 	"sort"
+	"strconv"
+	"sync/atomic"
 	"testing"
+
+	"golang.org/x/sync/errgroup"
 )
 
 func TestGroup(t *testing.T) {
@@ -316,5 +321,72 @@ func Test_mergeGroup(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMixCount(t *testing.T) {
+	groupType, err := groupTypeFromString("mix")
+	if err != nil {
+		t.Fatalf("failed to get group type: %v", err)
+	}
+
+	if groupType != groupTypeMix {
+		t.Errorf("unexpected group type: got %v, want %v", groupType, groupTypeMix)
+	}
+
+	group := &group{
+		Type:      groupType,
+		BatchSize: 2000,
+		MinSize:   1,
+		RunSize:   2000,
+	}
+
+	groupMix := group.NewGroup()
+
+	total := atomic.Int64{}
+	for i := 0; i < 1500; i++ {
+		total.Add(int64(i + 1))
+		groupMix.Add(&Record{Key: []byte(fmt.Sprintf("%d", i+1)), Value: []byte(fmt.Sprintf("value%d", i))})
+	}
+
+	ok := groupMix.IsEnough()
+	if ok {
+		t.Errorf("IsEnough() = %v, want %v", ok, true)
+	}
+
+	errGroup, _ := errgroup.WithContext(t.Context())
+	errGroup.SetLimit(10)
+
+	groupMix.Merge()
+	for records := range groupMix.Iter() {
+		if groupMix.IsSingle() {
+			for _, record := range records {
+				errGroup.Go(func() error {
+					v, err := strconv.ParseInt(string(record.Key), 10, 64)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					total.Add(-v)
+					return nil
+				})
+			}
+		} else {
+			errGroup.Go(func() error {
+				for _, record := range records {
+					t.Fatal(record)
+				}
+
+				return nil
+			})
+		}
+	}
+
+	if err := errGroup.Wait(); err != nil {
+		t.Errorf("wait group failed: %v", err)
+	}
+
+	if total.Load() != 0 {
+		t.Errorf("total = %d, want 0", total.Load())
 	}
 }
