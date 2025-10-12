@@ -132,7 +132,7 @@ type redisLogger struct {
 	log wkafka.Logger
 }
 
-func (r *redisLogger) Printf(_ context.Context, format string, v ...interface{}) {
+func (r *redisLogger) Printf(_ context.Context, format string, v ...any) {
 	r.log.Warn(fmt.Sprintf(format, v...))
 }
 

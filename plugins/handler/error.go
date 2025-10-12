@@ -46,7 +46,7 @@ func httpResponse(w http.ResponseWriter, msg string, code int) {
 	httpResponseByte(w, v, code)
 }
 
-func httpResponseJSON(w http.ResponseWriter, msg interface{}, code int) {
+func httpResponseJSON(w http.ResponseWriter, msg any, code int) {
 	v, _ := json.Marshal(msg)
 
 	httpResponseByte(w, v, code)

@@ -11,7 +11,7 @@ import (
 type testData struct {
 	Name    string
 	Topic   string
-	Details map[string]interface{}
+	Details map[string]any
 }
 
 func produceHook(d *testData, r *kgo.Record) error {
@@ -89,7 +89,7 @@ func Test_produce_Produce(t *testing.T) {
 					{
 						Name:  "test",
 						Topic: "test",
-						Details: map[string]interface{}{
+						Details: map[string]any{
 							"key": 1234,
 						},
 					},
@@ -133,14 +133,14 @@ func BenchmarkProduce(b *testing.B) {
 		{
 			Name:  "test",
 			Topic: "test",
-			Details: map[string]interface{}{
+			Details: map[string]any{
 				"key": 1234,
 			},
 		},
 		{
 			Name:  "test",
 			Topic: "test",
-			Details: map[string]interface{}{
+			Details: map[string]any{
 				"key": 1234,
 			},
 		},

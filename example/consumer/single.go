@@ -28,13 +28,13 @@ var (
 		Consumer: wkafka.ConsumerPreConfig{
 			FormatDLQTopic: "finops_{{.AppName}}_dlq",
 		},
-		Plugins: map[string]interface{}{
-			handler.PluginName: map[string]interface{}{
+		Plugins: map[string]any{
+			handler.PluginName: map[string]any{
 				"enabled": true,
 				"addr":    getPort(),
-				"pubsub": map[string]interface{}{
+				"pubsub": map[string]any{
 					"prefix": "finops_",
-					"redis": map[string]interface{}{
+					"redis": map[string]any{
 						"address": "localhost:6379",
 					},
 				},

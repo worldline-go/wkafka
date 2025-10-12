@@ -28,7 +28,7 @@ type producerConfig[T any] struct {
 	Hook func(T, *Record) error
 }
 
-type producerConfigInf interface{}
+type producerConfigInf any
 
 type OptionProducer func(producerConfigInf) error
 

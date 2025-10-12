@@ -12,7 +12,7 @@ import (
 
 type PluginFunc[T any] func(ctx context.Context, client *Client, cfg T) error
 
-type pluginWrapFunc func(ctx context.Context, client *Client, cfg interface{}) error
+type pluginWrapFunc func(ctx context.Context, client *Client, cfg any) error
 
 type plugin struct {
 	holder map[string]pluginWrapFunc
@@ -21,7 +21,7 @@ type plugin struct {
 }
 
 func pluginConvert[T any](fn PluginFunc[T]) pluginWrapFunc {
-	return func(ctx context.Context, client *Client, config interface{}) error {
+	return func(ctx context.Context, client *Client, config any) error {
 		var cfg T
 
 		decoder := struct2.Decoder{

@@ -15,7 +15,7 @@ var (
 type Data struct {
 	Name    string
 	Topic   string
-	Details map[string]interface{}
+	Details map[string]any
 }
 
 func ProduceHook(d *Data, r *wkafka.Record) error {
@@ -40,7 +40,7 @@ func RunExampleHook(ctx context.Context) error {
 	data := &Data{
 		Name:  "xxx",
 		Topic: "test",
-		Details: map[string]interface{}{
+		Details: map[string]any{
 			"key": 1234,
 		},
 	}

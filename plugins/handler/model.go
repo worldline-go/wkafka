@@ -51,8 +51,8 @@ type PubSubModel struct {
 }
 
 type PubSubModelPublish struct {
-	Type  string      `json:"type"`
-	Value interface{} `json:"value"`
+	Type  string `json:"type"`
+	Value any    `json:"value"`
 }
 
 func dlqRecordTransform(r *wkafka.Record) *DLQRecord {

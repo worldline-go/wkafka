@@ -1,6 +1,7 @@
 package wkafka
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -42,13 +43,7 @@ func skipCheck(skip map[string]map[int32]OffsetConfig, r *kgo.Record) bool {
 		return true
 	}
 
-	for _, offset := range offsets.Offsets {
-		if r.Offset == offset {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(offsets.Offsets, r.Offset)
 }
 
 func SkipReplace(skip SkipMap) func(SkipMap) SkipMap {

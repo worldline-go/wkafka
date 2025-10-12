@@ -5,7 +5,7 @@ import "testing"
 func Test_templateRun(t *testing.T) {
 	type args struct {
 		txt  string
-		data interface{}
+		data any
 	}
 	tests := []struct {
 		name    string

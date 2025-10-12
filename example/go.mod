@@ -25,11 +25,11 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/redis/go-redis/v9 v9.7.3 // indirect
-	github.com/twmb/franz-go/pkg/kadm v1.16.0 // indirect
+	github.com/redis/go-redis/v9 v9.13.0 // indirect
+	github.com/twmb/franz-go/pkg/kadm v1.16.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2 // indirect
 	github.com/twmb/tlscfg v1.2.1 // indirect
-	github.com/worldline-go/conn v0.1.1 // indirect
+	github.com/worldline-go/conn v0.1.12 // indirect
 	github.com/worldline-go/logz v0.5.1 // indirect
 	github.com/worldline-go/struct2 v1.3.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect

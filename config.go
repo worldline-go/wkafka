@@ -31,7 +31,7 @@ type Config struct {
 	Consumer ConsumerPreConfig `cfg:"consumer" json:"consumer"`
 
 	// Plugins add custom plugins to the client like handler.
-	Plugins map[string]interface{} `cfg:"plugins" json:"plugins"`
+	Plugins map[string]any `cfg:"plugins" json:"plugins"`
 }
 
 type ConsumerPreConfig struct {

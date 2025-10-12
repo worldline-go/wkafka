@@ -173,6 +173,8 @@ func newGroupPartition(size, runSize, min int) *groupPartition {
 }
 
 func (c *groupPartition) Add(r *Record) {
+	c.count++
+
 	if _, ok := c.records[r.Partition]; !ok {
 		c.records[r.Partition] = make([]*Record, 0, c.size)
 	}
