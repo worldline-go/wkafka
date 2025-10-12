@@ -22,9 +22,9 @@ const (
 )
 
 const (
-	GroupTypeKeyStr       = "key"
-	GroupTypePartitionStr = "partition"
-	GroupTypeMixStr       = "mix"
+	GroupTypeKeyStr       string = "key"
+	GroupTypePartitionStr string = "partition"
+	GroupTypeMixStr       string = "mix"
 )
 
 func groupTypeFromString(s string) (groupType, error) {
@@ -73,11 +73,12 @@ type groupRecords interface {
 }
 
 type groupKey struct {
-	size    int
-	runSize int
-	min     int
-	count   int
-	records map[string][]*Record
+	size       int
+	runSize    int
+	min        int
+	count      int
+	records    map[string][]*Record
+	allRecords []*Record
 }
 
 func newGroupKey(size, runSize, min int) *groupKey {
@@ -90,10 +91,11 @@ func newGroupKey(size, runSize, min int) *groupKey {
 	}
 
 	return &groupKey{
-		size:    size,
-		runSize: runSize,
-		min:     min,
-		records: make(map[string][]*Record),
+		size:       size,
+		runSize:    runSize,
+		min:        min,
+		records:    make(map[string][]*Record),
+		allRecords: make([]*Record, 0, runSize),
 	}
 }
 
@@ -105,6 +107,7 @@ func (c *groupKey) Add(r *Record) {
 
 	c.count++
 	c.records[key] = append(c.records[key], r)
+	c.allRecords = append(c.allRecords, r)
 }
 
 func (c *groupKey) IsEnough() bool {
@@ -112,17 +115,13 @@ func (c *groupKey) IsEnough() bool {
 }
 
 func (c *groupKey) Reset() {
+	c.allRecords = c.allRecords[:0]
 	c.records = make(map[string][]*Record)
 	c.count = 0
 }
 
 func (c *groupKey) AllRecords() []*Record {
-	allRecords := make([]*Record, 0, c.count)
-	for _, records := range c.records {
-		allRecords = append(allRecords, records...)
-	}
-
-	return allRecords
+	return c.allRecords
 }
 
 func (c *groupKey) Iter() iter.Seq[[]*Record] {
@@ -148,11 +147,12 @@ func (c *groupKey) Merge() {
 }
 
 type groupPartition struct {
-	size    int
-	runSize int
-	min     int
-	count   int
-	records map[int32][]*Record
+	size       int
+	runSize    int
+	min        int
+	count      int
+	records    map[int32][]*Record
+	allRecords []*Record
 }
 
 func newGroupPartition(size, runSize, min int) *groupPartition {
@@ -165,15 +165,18 @@ func newGroupPartition(size, runSize, min int) *groupPartition {
 	}
 
 	return &groupPartition{
-		size:    size,
-		runSize: runSize,
-		min:     min,
-		records: make(map[int32][]*Record),
+		size:       size,
+		runSize:    runSize,
+		min:        min,
+		records:    make(map[int32][]*Record),
+		allRecords: make([]*Record, 0, runSize),
 	}
 }
 
 func (c *groupPartition) Add(r *Record) {
 	c.count++
+
+	c.allRecords = append(c.allRecords, r)
 
 	if _, ok := c.records[r.Partition]; !ok {
 		c.records[r.Partition] = make([]*Record, 0, c.size)
@@ -187,17 +190,13 @@ func (c *groupPartition) IsEnough() bool {
 }
 
 func (c *groupPartition) Reset() {
+	c.allRecords = c.allRecords[:0]
 	c.records = make(map[int32][]*Record)
 	c.count = 0
 }
 
 func (c *groupPartition) AllRecords() []*Record {
-	allRecords := make([]*Record, 0, c.count)
-	for _, records := range c.records {
-		allRecords = append(allRecords, records...)
-	}
-
-	return allRecords
+	return c.allRecords
 }
 
 func (c *groupPartition) Iter() iter.Seq[[]*Record] {

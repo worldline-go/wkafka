@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -798,13 +799,19 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 
 func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 	topic1, topic2, topic3 := "multi-test-1", "multi-test-2", "multi-test-3"
-	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic1)
-	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic2)
-	s.container.Admin.CreateTopic(s.T().Context(), 3, 1, nil, topic3)
+	partitionCount := int32(9)
 
-	messages1 := make([]any, 0, 50)
-	for i := range 10 {
-		partition := int32(i % 3)
+	topic1Count := rand.Intn(5000) + 1000
+	topic2Count := rand.Intn(5000) + 1000
+	topic3Count := rand.Intn(5000) + 1000
+
+	s.container.Admin.CreateTopic(s.T().Context(), partitionCount, 1, nil, topic1)
+	s.container.Admin.CreateTopic(s.T().Context(), partitionCount, 1, nil, topic2)
+	s.container.Admin.CreateTopic(s.T().Context(), partitionCount, 1, nil, topic3)
+
+	messages1 := make([]any, 0, topic1Count)
+	for i := range int32(topic1Count) {
+		partition := int32(i % partitionCount)
 		messages1 = append(messages1, wkafka.Record{
 			Value:     []byte("1-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
 			Partition: partition,
@@ -812,9 +819,9 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 		})
 	}
 
-	messages2 := make([]any, 0, 50)
-	for i := range 10 {
-		partition := int32(i % 3)
+	messages2 := make([]any, 0, topic2Count)
+	for i := range int32(topic2Count) {
+		partition := int32(i % partitionCount)
 		messages2 = append(messages2, wkafka.Record{
 			Value:     []byte("2-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
 			Partition: partition,
@@ -822,9 +829,9 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 		})
 	}
 
-	messages3 := make([]any, 0, 50)
-	for i := range 10 {
-		partition := int32(i % 3)
+	messages3 := make([]any, 0, topic3Count)
+	for i := range int32(topic3Count) {
+		partition := int32(i % partitionCount)
 		messages3 = append(messages3, wkafka.Record{
 			Value:     []byte("3-test-message-" + fmt.Sprintf("%d-%d", partition, i)),
 			Partition: partition,
@@ -841,13 +848,20 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 	ctx, cancel := context.WithCancel(s.T().Context())
 
 	process := func(ctx context.Context, message []byte) error {
-		r := wkafka.CtxRecord(ctx)
+		// r := wkafka.CtxRecord(ctx)
+		// s.T().Log("callback", "partition", r.Partition, "key", string(r.Key), "message", string(message))
 
-		s.T().Log("callback", "partition", r.Partition, "key", string(r.Key), "message", string(message))
-		// time.Sleep(1 * time.Second) // Simulate processing time
+		if totalCount.Add(1) == int64(total)/2 {
+			s.container.Publish(s.T(), topic1, messages1...)
+			s.container.Publish(s.T(), topic2, messages2...)
+			s.container.Publish(s.T(), topic3, messages3...)
+		}
 
-		if v := totalCount.Add(1) == int64(total); v {
-			cancel()
+		if totalCount.Add(1) == int64(total)*2 {
+			time.AfterFunc(1*time.Second, func() {
+				// extra wait for commit
+				cancel()
+			})
 		}
 
 		return nil
@@ -857,9 +871,10 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 	kafka, err := wkafka.New(
 		ctx, s.container.Config,
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
-			GroupID:    "test-group-concurrent-multi",
-			Topics:     []string{topic1, topic2, topic3},
-			BatchCount: 2000,
+			GroupID:        "test-group-concurrent-multi",
+			Topics:         []string{topic1, topic2, topic3},
+			BatchCount:     400,
+			MaxPollRecords: 500,
 			Concurrent: wkafka.ConcurrentConfig{
 				Enabled: true,
 				Type:    wkafka.GroupTypeMixStr,
@@ -873,4 +888,14 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 
 	err = kafka.Consume(ctx, wkafka.WithCallback(process))
 	s.ErrorIs(err, context.Canceled)
+
+	// check lag is zero
+	lags, err := s.container.Admin.Lag(s.T().Context(), "test-group-concurrent-multi")
+	s.NoError(err)
+
+	for topic, lag := range lags {
+		total := lag.Lag.Total()
+		s.T().Log("topic", topic, "lag", total)
+		s.Equal(int64(0), total, "topic %s lag is not zero", topic)
+	}
 }

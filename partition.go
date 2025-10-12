@@ -2,6 +2,8 @@ package wkafka
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -33,9 +35,7 @@ func (h *partitionHandler) AddPartitionsRevoked(mapPartitions map[string][]int32
 		h.mapPartitionsRevoked = make(map[string][]int32, len(mapPartitions))
 	}
 
-	for topic, partition := range mapPartitions {
-		h.mapPartitionsRevoked[topic] = partition
-	}
+	maps.Copy(h.mapPartitionsRevoked, mapPartitions)
 }
 
 func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
@@ -46,9 +46,7 @@ func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
 		h.mapPartitionsLost = make(map[string][]int32, len(mapPartitions))
 	}
 
-	for topic, partition := range mapPartitions {
-		h.mapPartitionsLost[topic] = partition
-	}
+	maps.Copy(h.mapPartitionsLost, mapPartitions)
 }
 
 func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
@@ -63,13 +61,7 @@ func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
 		return false
 	}
 
-	for _, partition := range h.mapPartitionsRevoked[r.Topic] {
-		if partition == r.Partition {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition)
 }
 
 // IsRevokedRecordBatch is used to check if the record is revoked.
@@ -86,14 +78,11 @@ func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, b
 	for _, r := range records {
 		if _, ok := h.mapPartitionsRevoked[r.Topic]; !ok {
 			validRecords = append(validRecords, r)
+
 			continue
 		}
 
-		for _, partition := range h.mapPartitionsRevoked[r.Topic] {
-			if partition == r.Partition {
-				continue
-			}
-
+		if !slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition) {
 			validRecords = append(validRecords, r)
 		}
 	}
@@ -102,7 +91,7 @@ func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, b
 }
 
 func partitionLost(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(context.Context, *kgo.Client, map[string][]int32) {
-	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
+	return func(_ context.Context, _ *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {
 			return
 		}
@@ -116,7 +105,7 @@ func partitionLost(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(con
 }
 
 func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(context.Context, *kgo.Client, map[string][]int32) {
-	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
+	return func(_ context.Context, _ *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {
 			return
 		}
@@ -130,7 +119,7 @@ func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(
 }
 
 func partitionsAssigned(h *partitionHandler) func(context.Context, *kgo.Client, map[string][]int32) {
-	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
+	return func(_ context.Context, _ *kgo.Client, partitions map[string][]int32) {
 		if len(partitions) == 0 {
 			return
 		}

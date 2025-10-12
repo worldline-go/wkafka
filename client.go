@@ -345,7 +345,15 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	c.hook.setCtx(ctx)
 
 	g.Go(func() error {
-		c.logger.Info("wkafka start consuming", "topics", c.topics, "concurrency", c.consumerConfig.Concurrent.Enabled)
+		logAttributes := []any{"topics", c.topics, "concurrent", c.consumerConfig.Concurrent.Enabled}
+		if c.consumerConfig.Concurrent.Enabled {
+			logAttributes = append(logAttributes,
+				"concurrent_type", c.consumerConfig.Concurrent.Type,
+				"concurrent_process", c.consumerConfig.Concurrent.Process,
+			)
+		}
+
+		c.logger.Info("wkafka start consuming", logAttributes...)
 		if err := o.Consumer.Consume(ctx, c.Kafka); err != nil {
 			return fmt.Errorf("failed to consume %v: %w", c.topics, err)
 		}
