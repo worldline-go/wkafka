@@ -71,6 +71,9 @@ skip: # this is programatically skip, kafka will still consume the message
 # max records to consume per poll, 0 is default value which is not checking
 # use this option with block_rebalance
 max_poll_records: 0
+# settings for default decoder (JSON)
+decoder:
+  skip_invalid: true # skip invalid messages that can't be decoded; default is true
 # flag to block rebalance while pulled messages on process
 # use with block_rebalance_timeout and max_poll_records
 block_rebalance: false
@@ -277,10 +280,12 @@ Initialize kafka and redpanda console with docker-compose.
 make env
 ```
 
-| Service        | Description      |
-| -------------- | ---------------- |
-| localhost:9092 | Kafka broker     |
-| localhost:7071 | Redpanda console |
+| Service                         | Description              |
+|---------------------------------|--------------------------|
+| localhost:9092                  | Kafka broker for connect |
+| http://localhost:7071           | Redpanda console         |
+| http://localhost:3000           | Grafana                  |
+| http://localhost:8080/wkafka/ui | Handler UI               |
 
 Use examples with `EXAMPLE` env variable:
 

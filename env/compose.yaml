@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   kafka:
     image: docker.io/bitnamilegacy/kafka:3.8.1
     ports:
-      - "9092:9092"
+      - 9092:9092
     environment:
       - ALLOW_PLAINTEXT_LISTENER=yes
       # KRaft settings
@@ -19,11 +17,40 @@ services:
   redpanda:
     image: docker.io/redpandadata/console:v2.7.2
     ports:
-      - "7071:7071"
+      - 7071:7071
+    restart: always
     environment:
       - KAFKA_BROKERS=kafka:9094
       - SERVER_LISTENPORT=7071
   pubsub:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
     ports:
-      - "6379:6379"
+      - 6379:6379
+  #############################
+  # Monitoring
+  #############################
+  prometheus:
+    image: prom/prometheus:latest
+    # ports:
+    #   - "9090:9090"
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+    restart: always
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+  grafana:
+    image: grafana/grafana-oss:latest
+    ports:
+      - 3000:3000
+    volumes:
+      - ./config/grafana:/etc/grafana/provisioning
+    restart: always
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+  kminion:
+    image: redpandadata/kminion:v2.2.14
+    restart: always
+    environment:
+      - KAFKA_BROKERS=kafka:9094

@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # OpenTelemetry collector
+  - job_name: 'kafka-metrics'
+    static_configs:
+      - targets:
+          - 'kminion:8080'

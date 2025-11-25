@@ -2,11 +2,11 @@
 
 .PHONY: env
 env: ## Start env
-	docker compose -p wkafka -f env/docker-compose.yml up -d --remove-orphans
+	docker compose -p wkafka -f env/compose.yaml up -d --remove-orphans
 
 .PHONY: env-up
 env-up: ## Start env without detaching
-	docker compose -p wkafka -f env/docker-compose.yml up --remove-orphans
+	docker compose -p wkafka -f env/compose.yaml up --remove-orphans
 
 .PHONY: env-logs
 env-logs: ## Show env logs

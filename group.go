@@ -224,12 +224,14 @@ func (c *groupPartition) Merge() {
 
 type groupMix struct {
 	size    int
+	batch   int
 	records []*Record
 }
 
-func newGroupMix(size int) *groupMix {
+func newGroupMix(batch, size int) *groupMix {
 	return &groupMix{
 		size:    size,
+		batch:   batch,
 		records: make([]*Record, 0, size),
 	}
 }
@@ -251,6 +253,20 @@ func (c *groupMix) AllRecords() []*Record {
 }
 
 func (c *groupMix) Iter() iter.Seq[[]*Record] {
+	if c.size != c.batch {
+		// Return batches of records
+		return func(yield func([]*Record) bool) {
+			total := len(c.records)
+			for i := 0; i < total; i += c.batch {
+				end := min(i+c.batch, total)
+
+				if !yield(c.records[i:end]) {
+					return
+				}
+			}
+		}
+	}
+
 	return func(yield func([]*Record) bool) {
 		if !yield(c.records) {
 			return
@@ -273,7 +289,7 @@ func (c *group) NewGroup() groupRecords {
 	case groupTypePartition:
 		return newGroupPartition(c.BatchSize, c.RunSize, c.MinSize)
 	case groupTypeMix:
-		return newGroupMix(c.RunSize)
+		return newGroupMix(c.BatchSize, c.RunSize)
 	default:
 		panic("unknown concurrent type: " + strconv.Itoa(int(c.Type)))
 	}

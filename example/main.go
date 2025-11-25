@@ -11,6 +11,7 @@ import (
 
 	"github.com/worldline-go/wkafka/example/admin"
 	"github.com/worldline-go/wkafka/example/consumer"
+	"github.com/worldline-go/wkafka/example/demo"
 	"github.com/worldline-go/wkafka/example/producer"
 )
 
@@ -25,6 +26,16 @@ var examples = map[string]func(context.Context) error{
 	"consumer_single_byte":    consumer.RunExampleSingleByte,
 	"consumer_single_trace":   consumer.RunExampleSingleWithTrace,
 	"producer_hook":           producer.RunExampleHook,
+
+	"demo_push":                        demo.RunPush,
+	"demo_consume_single":              demo.RunConsumeSingle,
+	"demo_consume_batch":               demo.RunConsumeBatch,
+	"demo_consume_concurrent_single":   demo.RunConsumeConcurrentSingle,
+	"demo_consume_concurrent_batch":    demo.RunConsumeConcurrentBatch,
+	"demo_consume_single_block":        demo.RunConsumeSingleBlock,
+	"demo_consume_single_error":        demo.RunConsumeSingleError,
+	"demo_consume_single_error_dlq":    demo.RunConsumeSingleErrorDLQ,
+	"demo_consume_single_error_dlq_ui": demo.RunConsumeSingleErrorDLQUI,
 }
 
 func getExampleList() []string {
