@@ -19,6 +19,8 @@ services:
     ports:
       - 7071:7071
     restart: always
+    depends_on:
+      - kafka
     environment:
       - KAFKA_BROKERS=kafka:9094
       - SERVER_LISTENPORT=7071
@@ -52,5 +54,7 @@ services:
   kminion:
     image: redpandadata/kminion:v2.2.14
     restart: always
+    depends_on:
+      - kafka
     environment:
       - KAFKA_BROKERS=kafka:9094
