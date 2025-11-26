@@ -10,12 +10,18 @@ import (
 var KafkaConfigConsumerBatch = wkafka.ConsumerConfig{
 	Topics:     []string{"my-topic"},
 	GroupID:    "my-group",
-	BatchCount: 500, // default 100
+	BatchCount: 200, // default 100
 }
 
 // EXAMPLE=demo_consume_batch
 func RunConsumeBatch(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfig, wkafka.WithConsumer(KafkaConfigConsumerBatch), wkafka.WithLogger(slog.Default()))
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfig,
+		wkafka.WithConsumer(KafkaConfigConsumerBatch),
+		wkafka.WithClientInfo("demo_consume_batch", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
 	if err != nil {
 		return err
 	}
@@ -25,6 +31,8 @@ func RunConsumeBatch(ctx context.Context) error {
 }
 
 func ConsumeCallbackBatch(ctx context.Context, data []*Event) error {
+	Sleep(ctx, len(data))
+
 	// slog.Info("message consumed", "message", data.Message)
 
 	return nil

@@ -120,9 +120,7 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 		records := c.Group.AllRecords()
 		records, _ = c.PartitionHandler.IsRevokedRecordBatch(records)
 		if len(records) != 0 {
-			if err := cl.CommitRecords(ctx, records...); err != nil {
-				return fmt.Errorf("commit batch records failed: %w; offsets: %s", err, errorOffsetList(records))
-			}
+			cl.MarkCommitRecords(records...)
 		}
 
 		c.Group.Reset()
@@ -153,9 +151,7 @@ func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch
 		}
 
 		// commit if not see any error
-		if err := cl.CommitRecords(ctx, r); err != nil {
-			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), c.IsDLQ)
-		}
+		cl.MarkCommitRecords(r)
 	}
 
 	return nil

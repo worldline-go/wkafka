@@ -23,7 +23,13 @@ var KafkaConfigConsumerSingleError = wkafka.ConsumerConfig{
 
 // EXAMPLE=demo_consume_single_error
 func RunConsumeSingleError(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfig, wkafka.WithConsumer(KafkaConfigConsumerSingleError), wkafka.WithLogger(slog.Default()))
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfig,
+		wkafka.WithConsumer(KafkaConfigConsumerSingleError),
+		wkafka.WithClientInfo("demo_consume_single_error", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
 	if err != nil {
 		return err
 	}

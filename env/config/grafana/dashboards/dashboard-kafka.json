@@ -864,7 +864,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -897,7 +896,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 2
       },
@@ -916,7 +915,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -935,93 +934,6 @@
       ],
       "title": "Consumergroup => Topic Lag",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "rgb(31, 120, 193)",
-            "mode": "fixed"
-          },
-          "mappings": [
-            {
-              "options": {
-                "match": "null",
-                "result": {
-                  "text": "N/A"
-                }
-              },
-              "type": "special"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#299c46",
-                "value": 0
-              },
-              {
-                "color": "rgba(237, 129, 40, 0.89)",
-                "value": 200
-              },
-              {
-                "color": "#d44a3a",
-                "value": 1000
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 8,
-        "y": 2
-      },
-      "id": 21,
-      "maxDataPoints": 100,
-      "options": {
-        "colorMode": "none",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "avg (sum by (kubernetes_pod_name) (rate(kminion_kafka_consumer_group_offset_commits_total{group_id=\"$consumerGroup\"}[1m])))",
-          "format": "time_series",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "title": "Offset Commit Rate",
-      "type": "stat"
     },
     {
       "datasource": {
@@ -1087,13 +999,14 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "expr": "avg by (group_id,topic_name) (kminion_kafka_consumer_group_topic_lag{group_id=\"$consumerGroup\", topic_name=\"$topic\"})",
           "format": "time_series",
           "instant": false,
@@ -1140,7 +1053,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1192,7 +1104,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1258,7 +1170,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": true,
             "stacking": {
               "group": "A",
@@ -1310,12 +1221,12 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(kminion_kafka_consumer_group_topic_offset_sum{topic_name=~\"$topic\", group_id=~\"$consumerGroup\"}[1m])) by (group_id, topic_name)",
+          "expr": "sum(rate(kminion_kafka_consumer_group_topic_offset_sum{topic_name=~\"$topic\", group_id=~\"$consumerGroup\"}[10s])) by (group_id, topic_name)",
           "legendFormat": "{{group_id}} -> {{topic_name}}",
           "range": true,
           "refId": "A"
@@ -1372,7 +1283,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1422,7 +1332,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1502,7 +1412,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1581,7 +1491,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1635,7 +1545,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1686,7 +1595,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1762,7 +1671,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1794,9 +1703,6 @@
               "type": "auto"
             },
             "filterable": false,
-            "footer": {
-              "reducers": []
-            },
             "inspect": false
           },
           "mappings": [],
@@ -1825,6 +1731,14 @@
       "id": 30,
       "options": {
         "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
         "showHeader": true,
         "sortBy": [
           {
@@ -1833,7 +1747,7 @@
           }
         ]
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -1924,7 +1838,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1975,7 +1888,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -2004,9 +1917,6 @@
               "type": "auto"
             },
             "filterable": false,
-            "footer": {
-              "reducers": []
-            },
             "inspect": false
           },
           "mappings": [],
@@ -2035,10 +1945,18 @@
       "id": 32,
       "options": {
         "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "12.3.0",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -2110,15 +2028,13 @@
   ],
   "preload": false,
   "refresh": "",
-  "schemaVersion": 42,
+  "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": [
       {
         "current": {
-          "text": [
-            "All"
-          ],
+          "text": "All",
           "value": [
             "$__all"
           ]
@@ -2154,8 +2070,8 @@
       },
       {
         "current": {
-          "text": "my-group",
-          "value": "my-group"
+          "text": "All",
+          "value": "$__all"
         },
         "definition": "label_values(kminion_kafka_consumer_group_topic_lag,group_id)",
         "includeAll": true,
@@ -2174,8 +2090,8 @@
       },
       {
         "current": {
-          "text": "my-topic",
-          "value": "my-topic"
+          "text": "All",
+          "value": "$__all"
         },
         "definition": "label_values(kminion_kafka_consumer_group_topic_lag{group_id=\"$consumerGroup\"},topic_name)",
         "includeAll": true,
@@ -2194,12 +2110,12 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Kafka",
   "uid": "Ax-9LJsGz",
-  "version": 1
+  "version": 2
 }

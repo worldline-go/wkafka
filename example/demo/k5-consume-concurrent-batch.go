@@ -21,7 +21,13 @@ var KafkaConfigConsumerConcurrentBatch = wkafka.ConsumerConfig{
 
 // EXAMPLE=demo_consume_concurrent_batch
 func RunConsumeConcurrentBatch(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfig, wkafka.WithConsumer(KafkaConfigConsumerConcurrentBatch), wkafka.WithLogger(slog.Default()))
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfig,
+		wkafka.WithConsumer(KafkaConfigConsumerConcurrentBatch),
+		wkafka.WithClientInfo("demo_consume_concurrent_batch", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
 	if err != nil {
 		return err
 	}
@@ -31,6 +37,7 @@ func RunConsumeConcurrentBatch(ctx context.Context) error {
 }
 
 func ConsumeCallbackConcurrentBatch(ctx context.Context, data []*Event) error {
+	Sleep(ctx, len(data))
 	// slog.Info("message consumed", "message", data.Message)
 
 	return nil

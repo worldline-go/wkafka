@@ -66,9 +66,7 @@ func (d *dlqProcess[T]) Iteration(ctx context.Context, cl *kgo.Client, fetch kgo
 		}
 
 		// commit if not see any error
-		if err := cl.CommitRecords(ctx, r); err != nil {
-			return wrapErr(r, fmt.Errorf("commit records failed: %w", err), true)
-		}
+		cl.MarkCommitRecords(r)
 	}
 
 	return nil

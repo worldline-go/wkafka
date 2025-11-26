@@ -21,6 +21,7 @@ var (
 
 	// DefaultBlockRebalanceTimeout is the default timeout for blocking rebalance.
 	DefaultBlockRebalanceTimeout = 60 * time.Second
+	DefaultAutoCommitInterval    = 1 * time.Second
 )
 
 type Client struct {
@@ -233,8 +234,9 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 		}
 
 		kgoOpt = append(kgoOpt,
-			kgo.DisableAutoCommit(),
 			kgo.RequireStableFetchOffsets(),
+			kgo.AutoCommitMarks(),
+			kgo.AutoCommitInterval(DefaultAutoCommitInterval),
 			kgo.ConsumerGroup(o.ConsumerConfig.GroupID),
 			kgo.ConsumeResetOffset(startOffset),
 			kgo.OnPartitionsLost(partitionLost(partitionH, c.DLQRetry)),
@@ -286,6 +288,7 @@ func newClient(c *Client, cfg Config, o *options, isDLQ bool) (*kgo.Client, erro
 	return kgoClient, nil
 }
 
+// Close revokes assigned partitions and commits offsets.
 func (c *Client) Close() {
 	if c.Kafka != nil {
 		c.Kafka.Close()

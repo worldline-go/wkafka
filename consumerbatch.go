@@ -141,9 +141,7 @@ func (c *consumerBatch[T]) batchIterationConcurrent(ctx context.Context, cl *kgo
 		records := c.Group.AllRecords()
 		records, _ = c.PartitionHandler.IsRevokedRecordBatch(records)
 		if len(records) != 0 {
-			if err := cl.CommitRecords(ctx, records...); err != nil {
-				return fmt.Errorf("commit batch records failed: %w; offsets: %s", err, errorOffsetList(records))
-			}
+			cl.MarkCommitRecords(records...)
 		}
 
 		c.Group.Reset()
@@ -217,9 +215,7 @@ func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, f
 		records, _ = c.PartitionHandler.IsRevokedRecordBatch(records)
 
 		if len(records) != 0 {
-			if err := cl.CommitRecords(ctx, records...); err != nil {
-				return fmt.Errorf("commit batch records failed: %w; offsets: %s", err, errorOffsetList(records))
-			}
+			cl.MarkCommitRecords(records...)
 		}
 
 		// Instead of allocating new slices, reuse the existing slices by reslicing to zero length.

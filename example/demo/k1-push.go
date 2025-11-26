@@ -19,7 +19,12 @@ type Event struct {
 
 // EXAMPLE=demo_push
 func RunPush(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfig, wkafka.WithLogger(slog.Default()))
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfig,
+		wkafka.WithClientInfo("demo_push", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
 	if err != nil {
 		return err
 	}

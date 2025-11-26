@@ -27,6 +27,8 @@ var examples = map[string]func(context.Context) error{
 	"consumer_single_trace":   consumer.RunExampleSingleWithTrace,
 	"producer_hook":           producer.RunExampleHook,
 
+	"demo_admin": demo.RunAdmin,
+
 	"demo_push":                        demo.RunPush,
 	"demo_consume_single":              demo.RunConsumeSingle,
 	"demo_consume_batch":               demo.RunConsumeBatch,
@@ -67,6 +69,7 @@ func main() {
 
 	into.Init(
 		run,
+		into.WithMsgf("EXAMPLE=%s", exampleName),
 		into.WithLogger(logi.InitializeLog(logi.WithCaller(false))),
 	)
 }

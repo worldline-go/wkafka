@@ -13,3 +13,4 @@ datasources:
   editable: false
   jsonData:
     httpMethod: GET
+    timeInterval: "5s"

@@ -45,7 +45,7 @@ type ConsumerConfig struct {
 	MaxPollRecords int `cfg:"max_poll_records" json:"max_poll_records"`
 	// BatchCount is a number of messages processed in a single batch.
 	//  - Processing count could be less than BatchCount if the batch is not full.
-	//  - Usable with WithConsumerBatch
+	//  - Usable with WithCallbackBatch
 	//  - Default is 100.
 	BatchCount int `cfg:"batch_count" json:"batch_count"`
 	// DLQ is a dead letter queue configuration.

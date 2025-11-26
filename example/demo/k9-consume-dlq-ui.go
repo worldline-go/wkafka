@@ -36,8 +36,11 @@ var KafkaConfigConsumerSingleErrorDLQUI = wkafka.ConsumerConfig{
 
 // EXAMPLE=demo_consume_single_error_dlq_ui
 func RunConsumeSingleErrorDLQUI(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfigUI,
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfigUI,
 		wkafka.WithConsumer(KafkaConfigConsumerSingleErrorDLQUI),
+		wkafka.WithClientInfo("demo_consume_single_error_dlq_ui", "v0.1.0"),
 		wkafka.WithLogger(slog.Default()),
 		wkafka.WithPlugin(handler.PluginWithName()),
 	)

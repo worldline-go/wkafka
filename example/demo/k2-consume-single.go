@@ -14,7 +14,13 @@ var KafkaConfigConsumerSingle = wkafka.ConsumerConfig{
 
 // EXAMPLE=demo_consume_single
 func RunConsumeSingle(ctx context.Context) error {
-	client, err := wkafka.New(ctx, KafkaConfig, wkafka.WithConsumer(KafkaConfigConsumerSingle), wkafka.WithLogger(slog.Default()))
+	client, err := wkafka.New(
+		ctx,
+		KafkaConfig,
+		wkafka.WithConsumer(KafkaConfigConsumerSingle),
+		wkafka.WithClientInfo("demo_consume_single", "v0.1.0"),
+		wkafka.WithLogger(slog.Default()),
+	)
 	if err != nil {
 		return err
 	}
@@ -24,7 +30,7 @@ func RunConsumeSingle(ctx context.Context) error {
 }
 
 func ConsumeCallback(ctx context.Context, data *Event) error {
-	// slog.Info("message consumed", "message", data.Message)
+	Sleep(ctx, 1)
 
 	return nil
 }
