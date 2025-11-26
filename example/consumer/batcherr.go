@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/rs/zerolog/log"
 	"github.com/worldline-go/wkafka"
 )
 
@@ -53,9 +52,7 @@ func ProcessBatchErr(ctx context.Context, msg []DataBatchErr) error {
 			// if dlq is not enabled, return the error
 			if !wkafka.CtxIsDLQEnabled(ctx) {
 				// batch processing error
-				log.Error().
-					Msgf("message err, topic:%q partition:%d offset:%d",
-						records[i].Topic, records[i].Partition, records[i].Offset)
+				slog.Error("message err", "topic", records[i].Topic, "partition", records[i].Partition, "offset", records[i].Offset)
 
 				return fmt.Errorf("dlq disabled: %d", m.Test)
 			}
