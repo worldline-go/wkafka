@@ -69,6 +69,10 @@ type ConsumerConfig struct {
 
 	// Concurrent is a configuration for concurrent processing.
 	Concurrent ConcurrentConfig `cfg:"concurrent" json:"concurrent"`
+	// RecoverAfterProcessingError is a configuration of expected consumer behavior after processing returns any error.
+	// If it is true, any error besides FatalError will be just logged and won't cause a service restart.
+	// It is false as a default to ensure backwards compatibility.
+	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error"`
 }
 
 type ConcurrentConfig struct {

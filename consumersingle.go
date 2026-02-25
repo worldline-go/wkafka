@@ -5,9 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"golang.org/x/sync/errgroup"
 )
+
+type committer interface {
+	MarkCommitRecords(...*Record)
+}
 
 type consumerSingle[T any] struct {
 	*customer[T]
@@ -72,15 +77,32 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - ITERATION
 ////////////////////
 
-func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
-	for iter := fetch.RecordIter(); !iter.Done(); {
-		r := iter.Next()
+func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
+	for _, f := range fetch {
+		for _, topic := range f.Topics {
+			for _, partition := range topic.Partitions {
+				err := c.iterationPartition(ctx, cl, kgo.FetchTopicPartition{
+					Topic:          topic.Topic,
+					FetchPartition: partition,
+				})
+				if err != nil {
+					return fmt.Errorf("error while processing partition: %w", err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *consumerSingle[T]) iterationPartition(ctx context.Context, cl committer, partition kgo.FetchTopicPartition) error {
+	for i, r := range partition.Records {
 		// check partition is revoked if not then add to group
 		if !c.PartitionHandler.IsRevokedRecord(r) {
 			c.Group.Add(r)
 		}
 
-		if !iter.Done() && !c.Group.IsEnough() {
+		if i != len(partition.Records)-1 && !c.Group.IsEnough() {
 			continue
 		}
 
@@ -88,16 +110,23 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 		errGroup.SetLimit(c.Cfg.Concurrent.Process)
 
 		c.Group.Merge()
+	loop:
 		for records := range c.Group.Iter() {
 			if c.Group.IsSingle() {
 				for _, record := range records {
-					errGroup.Go(func() error {
-						if err := c.iterationMain(ctxGroup, record); err != nil {
-							return wrapErr(record, err, c.IsDLQ)
-						}
+					select {
+					// if one of the record in the group failed and context is cancelled, we don't want to run processing of the rest
+					case <-ctxGroup.Done():
+						break loop
+					default:
+						errGroup.Go(func() error {
+							if err := c.iterationMain(ctxGroup, record); err != nil {
+								return wrapErr(record, err, c.IsDLQ)
+							}
 
-						return nil
-					})
+							return nil
+						})
+					}
 				}
 			} else {
 				errGroup.Go(func() error {
@@ -113,6 +142,16 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 		}
 
 		if err := errGroup.Wait(); err != nil {
+			// We don't want to restart the service and only continue to the next partition.
+			if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
+				log.Ctx(ctx).Warn().Err(err).
+					Str("topic", partition.Topic).
+					Int32("partition", partition.Partition).
+					Msg("not committing the rest of the records in partition")
+
+				return nil
+			}
+
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 

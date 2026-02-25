@@ -22,6 +22,8 @@ var (
 	// ErrDLQ use with callback function to send message to DLQ topic.
 	// Prefer to use WrapErrDLQ to wrap error.
 	ErrDLQ = errors.New("error DLQ")
+	// ErrFatal is used to fail the consumer when it is set to recover after regular processing error.
+	ErrFatal = errors.New("fatal processing message")
 )
 
 // DLQError is use with callback function to send message to DLQ topic.
