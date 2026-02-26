@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"golang.org/x/sync/errgroup"
 )
@@ -144,10 +143,11 @@ func (c *consumerSingle[T]) iterationPartition(ctx context.Context, cl committer
 		if err := errGroup.Wait(); err != nil {
 			// We don't want to restart the service and only continue to the next partition.
 			if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
-				log.Ctx(ctx).Warn().Err(err).
-					Str("topic", partition.Topic).
-					Int32("partition", partition.Partition).
-					Msg("not committing the rest of the records in partition")
+				c.Logger.Warn("not committing the rest of the records in partition",
+					"error", err,
+					"topic", partition.Topic,
+					"partition", partition.Partition,
+				)
 
 				return nil
 			}
