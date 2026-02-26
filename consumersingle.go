@@ -9,6 +9,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type committer interface {
+	MarkCommitRecords(...*Record)
+}
+
 type consumerSingle[T any] struct {
 	*customer[T]
 
@@ -72,15 +76,57 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - ITERATION
 ////////////////////
 
-func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
-	for iter := fetch.RecordIter(); !iter.Done(); {
-		r := iter.Next()
+func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
+	// If we don't process partitions independently, we process all the records in the same loop. If any record fails,
+	// all the rest of the records are discarded.
+	if !c.Cfg.ProcessPartitionsIndependently {
+		if err := c.iterationRecords(ctx, cl, fetch.RecordIter()); err != nil {
+			return fmt.Errorf("error while processing records: %w", err)
+		}
+
+		return nil
+	}
+
+	// If we process partitions independently, we process records from different partitions in separate loops.
+	// If a record fails to be processed, only the rest of the records from the same partition is discarded.
+	for _, f := range fetch {
+		for _, topic := range f.Topics {
+			for _, partition := range topic.Partitions {
+				singlePartitionFetch := &kgo.Fetches{
+					{
+						Topics: []kgo.FetchTopic{
+							{
+								Topic:   topic.Topic,
+								TopicID: topic.TopicID,
+								Partitions: []kgo.FetchPartition{
+									partition,
+								},
+							},
+						},
+					},
+				}
+
+				err := c.iterationRecords(ctx, cl, singlePartitionFetch.RecordIter())
+				if err != nil {
+					return fmt.Errorf("error while processing partition: %w", err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, recordIter *kgo.FetchesRecordIter) error {
+	for !recordIter.Done() {
+		r := recordIter.Next()
+
 		// check partition is revoked if not then add to group
 		if !c.PartitionHandler.IsRevokedRecord(r) {
 			c.Group.Add(r)
 		}
 
-		if !iter.Done() && !c.Group.IsEnough() {
+		if !recordIter.Done() && !c.Group.IsEnough() {
 			continue
 		}
 
@@ -88,16 +134,23 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 		errGroup.SetLimit(c.Cfg.Concurrent.Process)
 
 		c.Group.Merge()
+	loop:
 		for records := range c.Group.Iter() {
 			if c.Group.IsSingle() {
 				for _, record := range records {
-					errGroup.Go(func() error {
-						if err := c.iterationMain(ctxGroup, record); err != nil {
-							return wrapErr(record, err, c.IsDLQ)
-						}
+					select {
+					// if one of the record in the group failed and context is cancelled, we don't want to run processing of the rest
+					case <-ctxGroup.Done():
+						break loop
+					default:
+						errGroup.Go(func() error {
+							if err := c.iterationMain(ctxGroup, record); err != nil {
+								return wrapErr(record, err, c.IsDLQ)
+							}
 
-						return nil
-					})
+							return nil
+						})
+					}
 				}
 			} else {
 				errGroup.Go(func() error {
@@ -113,6 +166,15 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl *kgo.Cli
 		}
 
 		if err := errGroup.Wait(); err != nil {
+			// We don't want to restart the service and only continue to the next partition or batch of records.
+			if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
+				c.Logger.Warn("not committing the rest of the records",
+					"error", err,
+				)
+
+				return nil
+			}
+
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 

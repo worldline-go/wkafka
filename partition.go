@@ -2,7 +2,6 @@ package wkafka
 
 import (
 	"context"
-	"maps"
 	"slices"
 	"sync"
 
@@ -35,7 +34,9 @@ func (h *partitionHandler) AddPartitionsRevoked(mapPartitions map[string][]int32
 		h.mapPartitionsRevoked = make(map[string][]int32, len(mapPartitions))
 	}
 
-	maps.Copy(h.mapPartitionsRevoked, mapPartitions)
+	for k, v := range mapPartitions {
+		h.mapPartitionsRevoked[k] = append(h.mapPartitionsRevoked[k], v...)
+	}
 }
 
 func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
@@ -46,7 +47,9 @@ func (h *partitionHandler) AddPartitionsLost(mapPartitions map[string][]int32) {
 		h.mapPartitionsLost = make(map[string][]int32, len(mapPartitions))
 	}
 
-	maps.Copy(h.mapPartitionsLost, mapPartitions)
+	for k, v := range mapPartitions {
+		h.mapPartitionsLost[k] = append(h.mapPartitionsLost[k], v...)
+	}
 }
 
 func (h *partitionHandler) IsRevokedRecord(r *Record) bool {

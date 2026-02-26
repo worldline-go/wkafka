@@ -69,6 +69,14 @@ type ConsumerConfig struct {
 
 	// Concurrent is a configuration for concurrent processing.
 	Concurrent ConcurrentConfig `cfg:"concurrent" json:"concurrent"`
+	// RecoverAfterProcessingError is a configuration of expected consumer behavior after processing returns any error.
+	// If it is true, any error besides ErrFatal will be just logged and won't cause a service restart.
+	// It is false as a default to ensure backwards compatibility.
+	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error"`
+	// ProcessPartitionsIndependently configures a consumer to process partitions independently. This means that if we
+	// consume from multiple topics and partitions at the same time and we get a processing error on the record from
+	// one partition, it won't affect the rest of partitions and they still can be successfully processed.
+	ProcessPartitionsIndependently bool `cfg:"process_partitions_independently" json:"process_partitions_independently"`
 }
 
 type ConcurrentConfig struct {
