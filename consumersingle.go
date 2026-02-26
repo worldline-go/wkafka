@@ -77,6 +77,8 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 ////////////////////
 
 func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
+	// If we don't process partitions independently, we process all the records in the same loop. If any record fails,
+	// all the rest of the records are discarded.
 	if !c.Cfg.ProcessPartitionsIndependently {
 		if err := c.iterationRecords(ctx, cl, fetch.RecordIter()); err != nil {
 			return fmt.Errorf("error while processing records: %w", err)
@@ -85,6 +87,8 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committe
 		return nil
 	}
 
+	// If we process partitions independently, we process records from different partitions in separate loops.
+	// If a record fails to be processed, only the rest of the records from the same partition is discarded.
 	for _, f := range fetch {
 		for _, topic := range f.Topics {
 			for _, partition := range topic.Partitions {
