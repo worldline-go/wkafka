@@ -77,13 +77,32 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 ////////////////////
 
 func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
+	if !c.Cfg.ProcessPartitionsIndependently {
+		if err := c.iterationRecords(ctx, cl, fetch.RecordIter()); err != nil {
+			return fmt.Errorf("error while processing records: %w", err)
+		}
+
+		return nil
+	}
+
 	for _, f := range fetch {
 		for _, topic := range f.Topics {
 			for _, partition := range topic.Partitions {
-				err := c.iterationPartition(ctx, cl, kgo.FetchTopicPartition{
-					Topic:          topic.Topic,
-					FetchPartition: partition,
-				})
+				singlePartitionFetch := &kgo.Fetches{
+					{
+						Topics: []kgo.FetchTopic{
+							{
+								Topic:   topic.Topic,
+								TopicID: topic.TopicID,
+								Partitions: []kgo.FetchPartition{
+									partition,
+								},
+							},
+						},
+					},
+				}
+
+				err := c.iterationRecords(ctx, cl, singlePartitionFetch.RecordIter())
 				if err != nil {
 					return fmt.Errorf("error while processing partition: %w", err)
 				}
@@ -94,14 +113,16 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committe
 	return nil
 }
 
-func (c *consumerSingle[T]) iterationPartition(ctx context.Context, cl committer, partition kgo.FetchTopicPartition) error {
-	for i, r := range partition.Records {
+func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, recordIter *kgo.FetchesRecordIter) error {
+	for !recordIter.Done() {
+		r := recordIter.Next()
+
 		// check partition is revoked if not then add to group
 		if !c.PartitionHandler.IsRevokedRecord(r) {
 			c.Group.Add(r)
 		}
 
-		if i != len(partition.Records)-1 && !c.Group.IsEnough() {
+		if !recordIter.Done() && !c.Group.IsEnough() {
 			continue
 		}
 
@@ -141,12 +162,10 @@ func (c *consumerSingle[T]) iterationPartition(ctx context.Context, cl committer
 		}
 
 		if err := errGroup.Wait(); err != nil {
-			// We don't want to restart the service and only continue to the next partition.
+			// We don't want to restart the service and only continue to the next partition or batch of records.
 			if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
-				c.Logger.Warn("not committing the rest of the records in partition",
+				c.Logger.Warn("not committing the rest of the records",
 					"error", err,
-					"topic", partition.Topic,
-					"partition", partition.Partition,
 				)
 
 				return nil
