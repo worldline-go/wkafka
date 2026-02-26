@@ -71,6 +71,7 @@ func TestConsumerSingle_iterationConcurrent(t *testing.T) {
 					Decode: func(raw []byte, r *kgo.Record) (any, error) {
 						return raw, nil
 					},
+					Logger: LogNoop{},
 				},
 				Group: newGroupMix(100, 10),
 				PartitionHandler: &partitionHandler{
@@ -101,6 +102,7 @@ func TestConsumerSingle_iterationConcurrent(t *testing.T) {
 					Decode: func(raw []byte, r *kgo.Record) (any, error) {
 						return raw, nil
 					},
+					Logger: LogNoop{},
 				},
 				Group: newGroupMix(100, 10),
 				PartitionHandler: &partitionHandler{
@@ -132,6 +134,7 @@ func TestConsumerSingle_iterationConcurrent(t *testing.T) {
 					Decode: func(raw []byte, r *kgo.Record) (any, error) {
 						return raw, nil
 					},
+					Logger: LogNoop{},
 				},
 				Group: newGroupMix(100, 10),
 				PartitionHandler: &partitionHandler{
