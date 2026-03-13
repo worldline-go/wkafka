@@ -95,8 +95,9 @@ func TestConsumerSingle_iterationConcurrent(t *testing.T) {
 						Concurrent: ConcurrentConfig{
 							Process: 20,
 						},
-						Skip:                        make(map[string]map[int32]OffsetConfig),
-						RecoverAfterProcessingError: true,
+						Skip:                           make(map[string]map[int32]OffsetConfig),
+						ProcessPartitionsIndependently: true,
+						RecoverAfterProcessingError:    true,
 					},
 					Skip: func(cfg *ConsumerConfig, r *kgo.Record) bool {
 						return false
@@ -176,7 +177,7 @@ func TestConsumerSingle_iterationRecords(t *testing.T) {
 						Process: 20,
 					},
 					Skip:                           make(map[string]map[int32]OffsetConfig),
-					RecoverAfterProcessingError:    true,
+					RecoverAfterProcessingError:    false,
 					ProcessPartitionsIndependently: true,
 				},
 				Skip: func(cfg *ConsumerConfig, r *kgo.Record) bool {
