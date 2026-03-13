@@ -178,6 +178,12 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 
+		// If the parent context was cancelled, the errGroup won't return any error, so we need to check the parent context
+		// and return the error if not nil.
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("main consumer context error: %w", err)
+		}
+
 		// commit all records in group
 		records := c.Group.AllRecords()
 		records, _ = c.PartitionHandler.IsRevokedRecordBatch(records)
