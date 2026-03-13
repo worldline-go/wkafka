@@ -108,6 +108,15 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committe
 
 				err := c.iterationRecords(ctx, cl, singlePartitionFetch.RecordIter())
 				if err != nil {
+					// We don't want to restart the service and only continue to the next partition.
+					if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
+						c.Logger.Warn("skipping to the next partition",
+							"error", err,
+						)
+
+						continue
+					}
+
 					return fmt.Errorf("error while processing partition: %w", err)
 				}
 			}
@@ -166,15 +175,6 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 		}
 
 		if err := errGroup.Wait(); err != nil {
-			// We don't want to restart the service and only continue to the next partition or batch of records.
-			if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
-				c.Logger.Warn("not committing the rest of the records",
-					"error", err,
-				)
-
-				return nil
-			}
-
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 
