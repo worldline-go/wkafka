@@ -41,6 +41,18 @@ type mockCommitter struct {
 	committedOffsets []int64
 }
 
+func (m *mockCommitter) PauseFetchPartitions(m2 map[string][]int32) map[string][]int32 {
+	return nil
+}
+
+func (m *mockCommitter) SetOffsets(m2 map[string]map[int32]kgo.EpochOffset) {
+	return
+}
+
+func (m *mockCommitter) ResumeFetchPartitions(m2 map[string][]int32) {
+	return
+}
+
 func (m *mockCommitter) MarkCommitRecords(records ...*Record) {
 	for _, record := range records {
 		m.committedOffsets = append(m.committedOffsets, record.Offset)

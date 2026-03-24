@@ -11,6 +11,9 @@ import (
 
 type committer interface {
 	MarkCommitRecords(...*Record)
+	PauseFetchPartitions(map[string][]int32) map[string][]int32
+	SetOffsets(map[string]map[int32]kgo.EpochOffset)
+	ResumeFetchPartitions(map[string][]int32)
 }
 
 type consumerSingle[T any] struct {
@@ -35,6 +38,10 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 
 		// if block on poll then allow rebalance
 		cl.AllowRebalance()
+
+		if c.PartitionHandler.ShouldResetRewind() {
+			c.PartitionHandler.ResetRewind()
+		}
 
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
@@ -130,6 +137,14 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
+		if c.PartitionHandler.IsPartitionRewinding(r.Topic, r.Partition) {
+			if c.PartitionHandler.ShouldSkipRecord(r) && !recordIter.Done() {
+				continue
+			}
+
+			c.PartitionHandler.MarkPartitionRewound(r.Topic, r.Partition)
+		}
+
 		// check partition is revoked if not then add to group
 		if !c.PartitionHandler.IsRevokedRecord(r) {
 			c.Group.Add(r)
@@ -175,6 +190,23 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 		}
 
 		if err := errGroup.Wait(); err != nil {
+			rewindRecord := c.Group.AllRecords()[0]
+			cl.PauseFetchPartitions(map[string][]int32{
+				r.Topic: {rewindRecord.Partition},
+			})
+
+			cl.SetOffsets(map[string]map[int32]kgo.EpochOffset{
+				rewindRecord.Topic: {
+					rewindRecord.Partition: kgo.NewOffset().At(rewindRecord.Offset).EpochOffset(),
+				},
+			})
+
+			cl.ResumeFetchPartitions(map[string][]int32{
+				rewindRecord.Topic: {rewindRecord.Partition},
+			})
+
+			c.PartitionHandler.RewindPartitionToUncommittedOffset(rewindRecord.Topic, rewindRecord.Partition, rewindRecord.Offset)
+
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 
