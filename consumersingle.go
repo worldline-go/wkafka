@@ -126,17 +126,15 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
-		// Check if the partition is being rewound and skip the record if it has an offset bigger than target offset.
-		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) {
-			if c.PartitionHandler.shouldSkipRecord(r) && !recordIter.Done() {
-				continue
+		// Check if the partition is being rewound and mark it as done.
+		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) && !c.PartitionHandler.shouldSkipRecord(r) {
+			if !c.PartitionHandler.shouldSkipRecord(r) {
+				c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
 			}
-
-			c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
 		}
 
-		// check partition is revoked if not then add to group
-		if !c.PartitionHandler.IsRevokedRecord(r) {
+		// Check if partition is revoked or being rewound. If not then add to group.
+		if !c.PartitionHandler.IsRevokedRecord(r) && !c.PartitionHandler.shouldSkipRecord(r) {
 			c.Group.Add(r)
 		}
 
