@@ -141,7 +141,9 @@ func partitionsAssigned(h *partitionHandler) func(context.Context, *kgo.Client, 
 	}
 }
 
-func (h *partitionHandler) RewindPartitionToUncommittedOffset(topic string, partition int32, offset int64) {
+// rewindPartitionToUncommittedOffset sets an offset that we want to rewind to on specific partition of the topic.
+// It should not be used to rewind to already committed offset.
+func (h *partitionHandler) rewindPartitionToUncommittedOffset(topic string, partition int32, offset int64) {
 	h.logger.Info("rewind partition to old offset", "topic", topic, "partition", partition, "offset", offset)
 
 	h.rewindMutex.Lock()
@@ -159,7 +161,8 @@ func (h *partitionHandler) RewindPartitionToUncommittedOffset(topic string, part
 	h.rewindPartitionsOffsets[topic][partition] = offset
 }
 
-func (h *partitionHandler) IsPartitionRewinding(topic string, partition int32) bool {
+// isPartitionRewinding checks if that specific partition of the topic is set to be rewound.
+func (h *partitionHandler) isPartitionRewinding(topic string, partition int32) bool {
 	h.rewindMutex.Lock()
 	defer h.rewindMutex.Unlock()
 
@@ -177,7 +180,8 @@ func (h *partitionHandler) IsPartitionRewinding(topic string, partition int32) b
 	return ok
 }
 
-func (h *partitionHandler) ShouldSkipRecord(r *kgo.Record) bool {
+// shouldSkipRecord checks if the record should be skipped because of rewinding process.
+func (h *partitionHandler) shouldSkipRecord(r *kgo.Record) bool {
 	h.rewindMutex.Lock()
 	defer h.rewindMutex.Unlock()
 
@@ -198,7 +202,8 @@ func (h *partitionHandler) ShouldSkipRecord(r *kgo.Record) bool {
 	return r.Offset > offset
 }
 
-func (h *partitionHandler) MarkPartitionRewound(topic string, partition int32) {
+// markPartitionRewound removes partition from the map of the partitions to be rewound.
+func (h *partitionHandler) markPartitionRewound(topic string, partition int32) {
 	h.rewindMutex.Lock()
 	defer h.rewindMutex.Unlock()
 
@@ -213,14 +218,16 @@ func (h *partitionHandler) MarkPartitionRewound(topic string, partition int32) {
 	delete(h.rewindPartitionsOffsets[topic], partition)
 }
 
-func (h *partitionHandler) ShouldResetRewind() bool {
+// shouldResetRewind returns true if the buffered fetches has been discarded and the rewind is not necessary anymore.
+func (h *partitionHandler) shouldResetRewind() bool {
 	h.rewindMutex.Lock()
 	defer h.rewindMutex.Unlock()
 
 	return h.resetRewindAtNextPoll
 }
 
-func (h *partitionHandler) ResetRewind() {
+// resetRewind resets the rewind process for all the topics and partitions.
+func (h *partitionHandler) resetRewind() {
 	h.rewindMutex.Lock()
 	defer h.rewindMutex.Unlock()
 

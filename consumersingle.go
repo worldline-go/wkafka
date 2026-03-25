@@ -39,8 +39,8 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 		// if block on poll then allow rebalance
 		cl.AllowRebalance()
 
-		if c.PartitionHandler.ShouldResetRewind() {
-			c.PartitionHandler.ResetRewind()
+		if c.PartitionHandler.shouldResetRewind() {
+			c.PartitionHandler.resetRewind()
 		}
 
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
@@ -84,18 +84,7 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 ////////////////////
 
 func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
-	// If we don't process partitions independently, we process all the records in the same loop. If any record fails,
-	// all the rest of the records are discarded.
-	if !c.Cfg.ProcessPartitionsIndependently {
-		if err := c.iterationRecords(ctx, cl, fetch.RecordIter()); err != nil {
-			return fmt.Errorf("error while processing records: %w", err)
-		}
-
-		return nil
-	}
-
-	// If we process partitions independently, we process records from different partitions in separate loops.
-	// If a record fails to be processed, only the rest of the records from the same partition is discarded.
+	// Process records from different partitions in separate loops.
 	for _, f := range fetch {
 		for _, topic := range f.Topics {
 			for _, partition := range topic.Partitions {
@@ -137,12 +126,13 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
-		if c.PartitionHandler.IsPartitionRewinding(r.Topic, r.Partition) {
-			if c.PartitionHandler.ShouldSkipRecord(r) && !recordIter.Done() {
+		// Check if the partition is being rewound and skip the record if it has an offset bigger than target offset.
+		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) {
+			if c.PartitionHandler.shouldSkipRecord(r) && !recordIter.Done() {
 				continue
 			}
 
-			c.PartitionHandler.MarkPartitionRewound(r.Topic, r.Partition)
+			c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
 		}
 
 		// check partition is revoked if not then add to group
@@ -190,7 +180,9 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 		}
 
 		if err := errGroup.Wait(); err != nil {
+			// Rewind partition to the earliest unconsumed message to try to reconsume it again.
 			rewindRecord := c.Group.AllRecords()[0]
+
 			cl.PauseFetchPartitions(map[string][]int32{
 				r.Topic: {rewindRecord.Partition},
 			})
@@ -205,7 +197,9 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 				rewindRecord.Topic: {rewindRecord.Partition},
 			})
 
-			c.PartitionHandler.RewindPartitionToUncommittedOffset(rewindRecord.Topic, rewindRecord.Partition, rewindRecord.Offset)
+			// SetOffsets does not discard already buffered fetches, so we need to skip all the newer records from this partition
+			// until we fetch the one that we want to rewind to.
+			c.PartitionHandler.rewindPartitionToUncommittedOffset(rewindRecord.Topic, rewindRecord.Partition, rewindRecord.Offset)
 
 			return fmt.Errorf("wait group failed: %w", err)
 		}
