@@ -14,6 +14,7 @@ type partitionHandler struct {
 	mapPartitionsRevoked map[string][]int32
 	mapPartitionsLost    map[string][]int32
 
+	rewindMutex             sync.Mutex
 	rewindPartitionsOffsets map[string]map[int32]int64
 	resetRewindAtNextPoll   bool
 
@@ -119,6 +120,9 @@ func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(
 		h.logger.Info("partition revoked", "partitions", partitions)
 
 		// After any partition is revoked, all the buffered fetches are dropped, so we don't need to rewind anymore.
+		h.rewindMutex.Lock()
+		defer h.rewindMutex.Unlock()
+
 		h.resetRewindAtNextPoll = true
 
 		h.AddPartitionsRevoked(partitions)
@@ -140,6 +144,9 @@ func partitionsAssigned(h *partitionHandler) func(context.Context, *kgo.Client, 
 func (h *partitionHandler) RewindPartitionToUncommittedOffset(topic string, partition int32, offset int64) {
 	h.logger.Info("rewind partition to old offset", "topic", topic, "partition", partition, "offset", offset)
 
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	if h.rewindPartitionsOffsets == nil {
 		h.rewindPartitionsOffsets = make(map[string]map[int32]int64)
 	}
@@ -153,6 +160,9 @@ func (h *partitionHandler) RewindPartitionToUncommittedOffset(topic string, part
 }
 
 func (h *partitionHandler) IsPartitionRewinding(topic string, partition int32) bool {
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	if h.rewindPartitionsOffsets == nil {
 		return false
 	}
@@ -168,6 +178,9 @@ func (h *partitionHandler) IsPartitionRewinding(topic string, partition int32) b
 }
 
 func (h *partitionHandler) ShouldSkipRecord(r *kgo.Record) bool {
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	if h.rewindPartitionsOffsets == nil {
 		return false
 	}
@@ -186,6 +199,9 @@ func (h *partitionHandler) ShouldSkipRecord(r *kgo.Record) bool {
 }
 
 func (h *partitionHandler) MarkPartitionRewound(topic string, partition int32) {
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	if h.rewindPartitionsOffsets == nil {
 		return
 	}
@@ -198,10 +214,16 @@ func (h *partitionHandler) MarkPartitionRewound(topic string, partition int32) {
 }
 
 func (h *partitionHandler) ShouldResetRewind() bool {
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	return h.resetRewindAtNextPoll
 }
 
 func (h *partitionHandler) ResetRewind() {
+	h.rewindMutex.Lock()
+	defer h.rewindMutex.Unlock()
+
 	h.rewindPartitionsOffsets = make(map[string]map[int32]int64)
 
 	h.resetRewindAtNextPoll = false
