@@ -24,7 +24,7 @@ func (c *consumerBatch[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Recor
 	c.PreCheck = fn
 }
 
-func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
+func (c *consumerBatch[T]) Consume(ctx context.Context, cl client) error {
 	for {
 		// flush the partition handler, it will be ready next poll
 		c.PartitionHandler.Flush()
@@ -72,7 +72,7 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // BATCH - ITERATION
 /////////////////////////////////
 
-func (c *consumerBatch[T]) batchIterationConcurrent(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerBatch[T]) batchIterationConcurrent(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 
@@ -150,7 +150,7 @@ func (c *consumerBatch[T]) batchIterationConcurrent(ctx context.Context, cl *kgo
 	return nil
 }
 
-func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerBatch[T]) batchIteration(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	// get the batch count but not more than the number of records
 	batchCount := c.Cfg.BatchCount
 	if v := fetch.NumRecords(); v < batchCount {

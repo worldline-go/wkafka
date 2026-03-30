@@ -72,7 +72,8 @@ type ConsumerConfig struct {
 	// RecoverAfterProcessingError is a configuration of expected consumer behavior after processing returns any error.
 	// If it is true, any error besides ErrFatal will be just logged and won't cause a service restart.
 	// It is false as a default to ensure backwards compatibility.
-	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error"`
+	// It works only when ConcurrentConfig.Enabled is set to true and ConcurrentConfig.Process is greater than 1.
+	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error" default:"false"`
 }
 
 type ConcurrentConfig struct {
@@ -174,7 +175,7 @@ type customer[T any] struct {
 }
 
 type consumer interface {
-	Consume(ctx context.Context, cl *kgo.Client) error
+	Consume(ctx context.Context, cl client) error
 	setPreCheck(fn func(ctx context.Context, r *kgo.Record) error)
 }
 

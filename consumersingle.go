@@ -9,11 +9,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type committer interface {
-	MarkCommitRecords(...*Record)
+//go:generate mockgen -typed -destination=mocks/client.go -source=consumersingle.go -package mocks client
+type client interface {
+	MarkCommitRecords(...*kgo.Record)
 	PauseFetchPartitions(map[string][]int32) map[string][]int32
 	SetOffsets(map[string]map[int32]kgo.EpochOffset)
 	ResumeFetchPartitions(map[string][]int32)
+	AllowRebalance()
+	PollRecords(ctx context.Context, maxPollRecords int) kgo.Fetches
 }
 
 type consumerSingle[T any] struct {
@@ -31,7 +34,7 @@ func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Reco
 	c.PreCheck = fn
 }
 
-func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
+func (c *consumerSingle[T]) Consume(ctx context.Context, cl client) error {
 	for {
 		// flush the partition handler, it will be ready next poll
 		c.PartitionHandler.Flush()
@@ -83,7 +86,7 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - ITERATION
 ////////////////////
 
-func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
+func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	// Process records from different partitions in separate loops.
 	for _, f := range fetch {
 		for _, topic := range f.Topics {
@@ -122,7 +125,9 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committe
 	return nil
 }
 
-func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, recordIter *kgo.FetchesRecordIter) error {
+func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl client, recordIter *kgo.FetchesRecordIter) error {
+	c.Group.Reset()
+
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
@@ -182,7 +187,7 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 			rewindRecord := c.Group.AllRecords()[0]
 
 			cl.PauseFetchPartitions(map[string][]int32{
-				r.Topic: {rewindRecord.Partition},
+				rewindRecord.Topic: {rewindRecord.Partition},
 			})
 
 			cl.SetOffsets(map[string]map[int32]kgo.EpochOffset{
@@ -221,7 +226,7 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 	return nil
 }
 
-func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerSingle[T]) iteration(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		// check partition is revoked

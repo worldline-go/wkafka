@@ -44,7 +44,7 @@ func newDLQProcess[T any](
 	}
 }
 
-func (d *dlqProcess[T]) Iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (d *dlqProcess[T]) Iteration(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		// check partition is revoked
