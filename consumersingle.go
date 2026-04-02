@@ -133,9 +133,7 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl client, rec
 
 		// Check if the partition is being rewound and mark it as done.
 		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) && !c.PartitionHandler.shouldSkipRecord(r) {
-			if !c.PartitionHandler.shouldSkipRecord(r) {
-				c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
-			}
+			c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
 		}
 
 		// Check if partition is revoked or being rewound. If not then add to group.
