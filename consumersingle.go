@@ -9,8 +9,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type committer interface {
-	MarkCommitRecords(...*Record)
+//go:generate mockgen -typed -destination=mocks/client.go -source=consumersingle.go -package mocks client
+type client interface {
+	MarkCommitRecords(...*kgo.Record)
+	PauseFetchPartitions(map[string][]int32) map[string][]int32
+	SetOffsets(map[string]map[int32]kgo.EpochOffset)
+	ResumeFetchPartitions(map[string][]int32)
+	AllowRebalance()
+	PollRecords(ctx context.Context, maxPollRecords int) kgo.Fetches
 }
 
 type consumerSingle[T any] struct {
@@ -28,13 +34,17 @@ func (c *consumerSingle[T]) setPreCheck(fn func(ctx context.Context, r *kgo.Reco
 	c.PreCheck = fn
 }
 
-func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
+func (c *consumerSingle[T]) Consume(ctx context.Context, cl client) error {
 	for {
 		// flush the partition handler, it will be ready next poll
 		c.PartitionHandler.Flush()
 
 		// if block on poll then allow rebalance
 		cl.AllowRebalance()
+
+		if c.PartitionHandler.shouldResetRewind() {
+			c.PartitionHandler.resetRewind()
+		}
 
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
@@ -76,19 +86,8 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl *kgo.Client) error {
 // SINGLE - ITERATION
 ////////////////////
 
-func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committer, fetch kgo.Fetches) error {
-	// If we don't process partitions independently, we process all the records in the same loop. If any record fails,
-	// all the rest of the records are discarded.
-	if !c.Cfg.ProcessPartitionsIndependently {
-		if err := c.iterationRecords(ctx, cl, fetch.RecordIter()); err != nil {
-			return fmt.Errorf("error while processing records: %w", err)
-		}
-
-		return nil
-	}
-
-	// If we process partitions independently, we process records from different partitions in separate loops.
-	// If a record fails to be processed, only the rest of the records from the same partition is discarded.
+func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl client, fetch kgo.Fetches) error {
+	// Process records from different partitions in separate loops.
 	for _, f := range fetch {
 		for _, topic := range f.Topics {
 			for _, partition := range topic.Partitions {
@@ -126,12 +125,19 @@ func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl committe
 	return nil
 }
 
-func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, recordIter *kgo.FetchesRecordIter) error {
+func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl client, recordIter *kgo.FetchesRecordIter) error {
+	c.Group.Reset()
+
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
-		// check partition is revoked if not then add to group
-		if !c.PartitionHandler.IsRevokedRecord(r) {
+		// Check if the partition is being rewound and mark it as done.
+		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) && !c.PartitionHandler.shouldSkipRecord(r) {
+			c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
+		}
+
+		// Check if partition is revoked or being rewound. If not then add to group.
+		if !c.PartitionHandler.IsRevokedRecord(r) && !c.PartitionHandler.shouldSkipRecord(r) {
 			c.Group.Add(r)
 		}
 
@@ -175,6 +181,27 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 		}
 
 		if err := errGroup.Wait(); err != nil {
+			// Rewind partition to the earliest unconsumed message to try to reconsume it again.
+			rewindRecord := c.Group.AllRecords()[0]
+
+			cl.PauseFetchPartitions(map[string][]int32{
+				rewindRecord.Topic: {rewindRecord.Partition},
+			})
+
+			cl.SetOffsets(map[string]map[int32]kgo.EpochOffset{
+				rewindRecord.Topic: {
+					rewindRecord.Partition: kgo.NewOffset().At(rewindRecord.Offset).EpochOffset(),
+				},
+			})
+
+			cl.ResumeFetchPartitions(map[string][]int32{
+				rewindRecord.Topic: {rewindRecord.Partition},
+			})
+
+			// SetOffsets does not discard already buffered fetches, so we need to skip all the newer records from this partition
+			// until we fetch the one that we want to rewind to.
+			c.PartitionHandler.rewindPartitionToUncommittedOffset(rewindRecord.Topic, rewindRecord.Partition, rewindRecord.Offset)
+
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 
@@ -197,7 +224,7 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl committer, 
 	return nil
 }
 
-func (c *consumerSingle[T]) iteration(ctx context.Context, cl *kgo.Client, fetch kgo.Fetches) error {
+func (c *consumerSingle[T]) iteration(ctx context.Context, cl client, fetch kgo.Fetches) error {
 	for iter := fetch.RecordIter(); !iter.Done(); {
 		r := iter.Next()
 		// check partition is revoked

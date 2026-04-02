@@ -72,12 +72,8 @@ type ConsumerConfig struct {
 	// RecoverAfterProcessingError is a configuration of expected consumer behavior after processing returns any error.
 	// If it is true, any error besides ErrFatal will be just logged and won't cause a service restart.
 	// It is false as a default to ensure backwards compatibility.
-	// It works only when ProcessPartitionsIndependently is also true.
-	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error"`
-	// ProcessPartitionsIndependently configures a consumer to process partitions independently. This means that if we
-	// consume from multiple topics and partitions at the same time and we get a processing error on the record from
-	// one partition, it won't affect the rest of partitions and they still can be successfully processed.
-	ProcessPartitionsIndependently bool `cfg:"process_partitions_independently" json:"process_partitions_independently"`
+	// It works only when ConcurrentConfig.Enabled is set to true and ConcurrentConfig.Process is greater than 1.
+	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error" default:"false"`
 }
 
 type ConcurrentConfig struct {
@@ -179,7 +175,7 @@ type customer[T any] struct {
 }
 
 type consumer interface {
-	Consume(ctx context.Context, cl *kgo.Client) error
+	Consume(ctx context.Context, cl client) error
 	setPreCheck(fn func(ctx context.Context, r *kgo.Record) error)
 }
 

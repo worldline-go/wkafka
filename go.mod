@@ -15,6 +15,7 @@ require (
 	github.com/worldline-go/logz v0.5.4
 	github.com/worldline-go/struct2 v1.3.1
 	github.com/worldline-go/test v0.4.1
+	go.uber.org/mock v0.6.0
 	golang.org/x/sync v0.18.0
 )
 
