@@ -391,6 +391,10 @@ func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 	return nil
 }
 
+func (c *Client) ProduceSync(ctx context.Context, records []*kgo.Record) kgo.ProduceResults {
+	return c.Kafka.ProduceSync(ctx, records...)
+}
+
 // Admin returns an admin client to manage kafka.
 func (c *Client) Admin() *kadm.Client {
 	return kadm.NewClient(c.Kafka)
