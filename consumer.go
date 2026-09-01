@@ -329,12 +329,14 @@ func WithDecode[T any](fn func(raw []byte, r *kgo.Record) (T, error)) OptionCons
 		switch v := o.Consumer.(type) {
 		case *consumerBatch[T]:
 			v.Decode = fn
-			//nolint:forcetypeassert // internally checked
-			o.ConsumerDLQ.(*consumerBatch[T]).Decode = fn
+			if consumerDLQ, ok := o.ConsumerDLQ.(*consumerBatch[T]); ok {
+				consumerDLQ.Decode = fn
+			}
 		case *consumerSingle[T]:
 			v.Decode = fn
-			//nolint:forcetypeassert // internally checked
-			o.ConsumerDLQ.(*consumerSingle[T]).Decode = fn
+			if consumerDLQ, ok := o.ConsumerDLQ.(*consumerSingle[T]); ok {
+				consumerDLQ.Decode = fn
+			}
 		default:
 			return fmt.Errorf("WithDecode unknown data type %T", v)
 		}

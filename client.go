@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v7"
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -54,6 +54,8 @@ type Client struct {
 }
 
 func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
+	initialized := false
+
 	o := options{
 		ClientID:          DefaultClientID,
 		AutoTopicCreation: true,
@@ -87,12 +89,19 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		hook: &hooker{
 			ctx: context.Background(),
 		},
+		cancel: func() {},
 	}
+	defer func() {
+		if !initialized {
+			c.Close()
+		}
+	}()
 
 	kgoClient, err := newClient(c, cfg, &o, false)
 	if err != nil {
 		return nil, err
 	}
+	c.Kafka = kgoClient
 
 	var kgoClientDLQ *kgo.Client
 	if o.ConsumerDLQEnabled {
@@ -100,28 +109,30 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.KafkaDLQ = kgoClientDLQ
 	}
-
-	c.Kafka = kgoClient
-	c.KafkaDLQ = kgoClientDLQ
 
 	if o.Ping {
 		if o.PingRetry {
+			maxElapsedTime := time.Duration(0)
 			if o.PingBackoff == nil {
 				o.PingBackoff = defaultBackoff()
+				maxElapsedTime = 30 * time.Second
 			}
 
-			b := backoff.WithContext(o.PingBackoff, ctx)
-
-			if err := backoff.RetryNotify(func() error {
+			if _, err := backoff.Retry(ctx, func() (struct{}, error) {
 				if err := c.Kafka.Ping(ctx); err != nil {
-					return fmt.Errorf("%w: %w", ErrConnection, err)
+					return struct{}{}, fmt.Errorf("%w: %w", ErrConnection, err)
 				}
 
-				return nil
-			}, b, func(err error, d time.Duration) {
-				c.logger.Warn("wkafka ping failed", "error", err.Error(), "retry_in", d.String())
-			}); err != nil {
+				return struct{}{}, nil
+			},
+				backoff.WithBackOff(o.PingBackoff),
+				backoff.WithMaxElapsedTime(maxElapsedTime),
+				backoff.WithNotify(func(err error, d time.Duration) {
+					c.logger.Warn("wkafka ping failed", "error", err.Error(), "retry_in", d.String())
+				}),
+			); err != nil {
 				return nil, err
 			}
 		} else {
@@ -146,6 +157,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		}
 	}
 
+	initialized = true
 	return c, nil
 }
 
@@ -298,7 +310,9 @@ func (c *Client) Close() {
 	}
 
 	// cancel for plugins
-	c.cancel()
+	if c.cancel != nil {
+		c.cancel()
+	}
 }
 
 // GroupID returns the consumer group id.
@@ -367,7 +381,7 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	g.Go(func() error {
 		c.logger.Info("wkafka start consuming DLQ", "topics", c.dlqTopics)
 		if err := o.ConsumerDLQ.Consume(ctx, c.KafkaDLQ); err != nil {
-			return fmt.Errorf("failed to consume DLQ %v: %w", c.topics, err)
+			return fmt.Errorf("failed to consume DLQ %v: %w", c.dlqTopics, err)
 		}
 
 		return nil

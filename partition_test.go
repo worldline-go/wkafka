@@ -110,3 +110,20 @@ func Test_partitionHandler_IsRevokedRecord(t *testing.T) {
 		})
 	}
 }
+
+func TestPartitionHandlerFiltersLostPartitions(t *testing.T) {
+	h := partitionHandler{}
+	h.AddPartitionsLost(map[string][]int32{"topic1": {1}})
+
+	lost := &Record{Topic: "topic1", Partition: 1}
+	valid := &Record{Topic: "topic1", Partition: 2}
+
+	if !h.IsRevokedRecord(lost) {
+		t.Fatal("lost partition record was not filtered")
+	}
+
+	records, filtered := h.IsRevokedRecordBatch([]*Record{lost, valid})
+	if !filtered || len(records) != 1 || records[0] != valid {
+		t.Fatalf("IsRevokedRecordBatch() = %v, %v; want only valid record", records, filtered)
+	}
+}

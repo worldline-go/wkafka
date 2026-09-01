@@ -254,6 +254,7 @@ func (o *OptionDLQTrigger) ToOption() OptionDLQTriggerFn {
 	return func(opt *OptionDLQTrigger) {
 		opt.Force = o.Force
 		opt.Spec = o.Spec
+		opt.SpecPartitions = o.SpecPartitions
 	}
 }
 

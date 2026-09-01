@@ -368,6 +368,7 @@ func (h *Handler) RetryDLQ(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 	clientKey, messageChan := h.addClient()
+	defer h.deleteClient(clientKey)
 
 	// prepare the header
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -396,7 +397,6 @@ func (h *Handler) Event(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", message.Type, message.Value)
 			flusher.Flush()
 		case <-r.Context().Done():
-			h.deleteClient(clientKey)
 			return
 		}
 	}

@@ -3,7 +3,7 @@ package wkafka
 import (
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v7"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -11,11 +11,11 @@ import (
 var DefaultBatchCount = 100
 
 func defaultBackoff() backoff.BackOff {
-	return backoff.NewExponentialBackOff(
-		backoff.WithInitialInterval(2*time.Second),
-		backoff.WithMaxInterval(7*time.Second),
-		backoff.WithMaxElapsedTime(30*time.Second),
-	)
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 2 * time.Second
+	b.MaxInterval = 7 * time.Second
+
+	return b
 }
 
 type options struct {

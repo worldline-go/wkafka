@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v7"
 )
 
 type waitRetry struct {
@@ -15,14 +15,14 @@ type waitRetry struct {
 }
 
 func newWaitRetry(initialDuration, maxDuration time.Duration) *waitRetry {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = initialDuration
+	b.MaxInterval = maxDuration
+
 	return &waitRetry{
 		interval: initialDuration,
-		backoff: backoff.NewExponentialBackOff(
-			backoff.WithInitialInterval(initialDuration),
-			backoff.WithMaxInterval(maxDuration),
-			backoff.WithMaxElapsedTime(0),
-		),
-		ch: make(chan struct{}, 1),
+		backoff:  b,
+		ch:       make(chan struct{}, 1),
 	}
 }
 

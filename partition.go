@@ -60,15 +60,8 @@ func (h *partitionHandler) IsRevokedRecord(r *Record) bool {
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	if len(h.mapPartitionsRevoked) == 0 {
-		return false
-	}
-
-	if _, ok := h.mapPartitionsRevoked[r.Topic]; !ok {
-		return false
-	}
-
-	return slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition)
+	return slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition) ||
+		slices.Contains(h.mapPartitionsLost[r.Topic], r.Partition)
 }
 
 // IsRevokedRecordBatch is used to check if the record is revoked.
@@ -77,19 +70,14 @@ func (h *partitionHandler) IsRevokedRecordBatch(records []*Record) ([]*Record, b
 	h.mutex.RLock()
 	defer h.mutex.RUnlock()
 
-	if len(h.mapPartitionsRevoked) == 0 {
+	if len(h.mapPartitionsRevoked) == 0 && len(h.mapPartitionsLost) == 0 {
 		return records, false
 	}
 
 	validRecords := make([]*Record, 0, len(records))
 	for _, r := range records {
-		if _, ok := h.mapPartitionsRevoked[r.Topic]; !ok {
-			validRecords = append(validRecords, r)
-
-			continue
-		}
-
-		if !slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition) {
+		if !slices.Contains(h.mapPartitionsRevoked[r.Topic], r.Partition) &&
+			!slices.Contains(h.mapPartitionsLost[r.Topic], r.Partition) {
 			validRecords = append(validRecords, r)
 		}
 	}

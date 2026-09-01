@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/worldline-go/conn/connredis"
 	"github.com/worldline-go/wkafka"
 )
 
@@ -20,7 +19,7 @@ type pubsub interface {
 type PubSubConfig struct {
 	Prefix string `cfg:"prefix" json:"prefix"`
 
-	Redis connredis.Config `cfg:"redis" json:"redis"`
+	Redis ConfigRedis `cfg:"redis" json:"redis"`
 }
 
 func (c *PubSubConfig) New(id string, logger wkafka.Logger) (pubsub, error) {
@@ -136,10 +135,10 @@ func (r *redisLogger) Printf(_ context.Context, format string, v ...any) {
 	r.log.Warn(fmt.Sprintf(format, v...))
 }
 
-func newRedis(r connredis.Config, topic string, logger wkafka.Logger) (*Redis, error) {
+func newRedis(r ConfigRedis, topic string, logger wkafka.Logger) (*Redis, error) {
 	redis.SetLogger(&redisLogger{log: logger})
 
-	client, err := connredis.New(r)
+	client, err := newRedisClient(r)
 	if err != nil {
 		return nil, err
 	}

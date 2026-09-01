@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +26,20 @@ import (
 type ConsumerSuite struct {
 	suite.Suite
 	container *containerkafka.Container
+}
+
+func TestMain(m *testing.M) {
+	if os.Getenv("DOCKER_HOST") == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			colimaSocket := filepath.Join(home, ".colima", "default", "docker.sock")
+			if _, err := os.Stat(colimaSocket); err == nil {
+				_ = os.Setenv("DOCKER_HOST", "unix://"+colimaSocket)
+				_ = os.Setenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
+			}
+		}
+	}
+
+	os.Exit(m.Run())
 }
 
 func (s *ConsumerSuite) SetupSuite() {

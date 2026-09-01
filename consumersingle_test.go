@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -204,7 +205,7 @@ func TestConsumerSingle_iterationRecords(t *testing.T) {
 	t.Run("consumer stops when parent context is cancelled, nothing is committed", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
-		processed := make([]any, 0, 20)
+		var processed atomic.Int32
 		cs := consumerSingle[any]{
 			customer: &customer[any]{
 				Cfg: &ConsumerConfig{
@@ -227,7 +228,7 @@ func TestConsumerSingle_iterationRecords(t *testing.T) {
 				logger: LogNoop{},
 			},
 			Process: func(ctx context.Context, msg any) error {
-				processed = append(processed, msg)
+				processed.Add(1)
 				time.Sleep(time.Second)
 
 				return nil
@@ -270,7 +271,7 @@ func TestConsumerSingle_iterationRecords(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorContains(t, err, "main consumer context error")
 
-		require.LessOrEqual(t, len(processed), 20, "at most 20 events should be processed")
+		require.LessOrEqual(t, processed.Load(), int32(20), "at most 20 events should be processed")
 	})
 }
 
