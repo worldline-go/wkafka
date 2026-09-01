@@ -3,7 +3,6 @@
 [![License](https://img.shields.io/github/license/worldline-go/wkafka?color=red&style=flat-square)](https://raw.githubusercontent.com/worldline-go/wkafka/main/LICENSE)
 [![Coverage](https://img.shields.io/sonar/coverage/worldline-go_wkafka?logo=sonarcloud&server=https%3A%2F%2Fsonarcloud.io&style=flat-square)](https://sonarcloud.io/summary/overall?id=worldline-go_wkafka)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/worldline-go/wkafka/test.yml?branch=main&logo=github&style=flat-square&label=ci)](https://github.com/worldline-go/wkafka/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/worldline-go/wkafka?style=flat-square)](https://goreportcard.com/report/github.com/worldline-go/wkafka)
 [![Go PKG](https://raw.githubusercontent.com/worldline-go/guide/main/badge/custom/reference.svg)](https://pkg.go.dev/github.com/worldline-go/wkafka)
 
 wkafka is a wrapper for kafka library to initialize and use for microservices.
