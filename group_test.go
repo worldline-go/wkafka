@@ -11,6 +11,49 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func TestGroupResetClearsRecords(t *testing.T) {
+	for _, typ := range []groupType{groupTypeKey, groupTypePartition, groupTypeMix} {
+		t.Run(typ.String(), func(t *testing.T) {
+			cfg := group{Type: typ, BatchSize: 4, RunSize: 4, MinSize: 1}
+			g := cfg.NewGroup()
+			for _, size := range []int{4, 1} {
+				for i := range size {
+					g.Add(&Record{Topic: "topic", Partition: int32(i), Key: []byte(strconv.Itoa(i)), Value: []byte("payload")})
+				}
+				backing := g.AllRecords()[:cap(g.AllRecords())]
+				g.Reset()
+				for i, record := range backing {
+					if record != nil {
+						t.Fatalf("reset retained record at index %d", i)
+					}
+				}
+				if len(g.AllRecords()) != 0 || g.IsEnough() {
+					t.Fatal("reset did not empty the group")
+				}
+				for records := range g.Iter() {
+					if len(records) != 0 {
+						t.Fatal("reset retained grouped records")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMergeGroupMinimumOneNoAllocations(t *testing.T) {
+	record := &Record{}
+	groups := map[string][]*Record{"a": {record}, "b": {record}}
+	for _, minimum := range []int{0, 1} {
+		allocs := testing.AllocsPerRun(100, func() { mergeGroup(minimum, groups) })
+		if allocs != 0 {
+			t.Fatalf("minimum %d: got %v allocations, want zero", minimum, allocs)
+		}
+		if len(groups) != 2 || len(groups["a"]) != 1 || len(groups["b"]) != 1 {
+			t.Fatal("merge changed groups that already meet the minimum")
+		}
+	}
+}
+
 func TestGroup(t *testing.T) {
 	type args struct {
 		groupType string

@@ -80,13 +80,13 @@ block_rebalance: false
 # DLQ consumer does not use block rebalance
 block_rebalance_timeout: 60s # timeout to block rebalance, default is 60 seconds
 # max records to consume per batch to give callback function, default is 100
-# on concurrent this is the size of the each sub group, also check run_size option
+# caps ordinary and concurrent mix batches; key/partition groups can exceed this size
 batch_count: 100
 concurrent:
   enabled: false # enable concurrent processing of messages
-  process: 10 # max concurrent processing, default is 10
+  process: 10 # max simultaneous processing; 1 keeps grouping, nonpositive values default to 10
   min_size: 1 # minimum size of the bucket for merging multiple bucket, default is 1
-  run_size: 0 # size of the group to start processing, default is 0 which means same as batch_count
+  run_size: 0 # records per run; nonpositive uses batch_count * process for concurrent mix batches, batch_count otherwise
   type: "key" # type of grouping records to process, can be "mix", "partition", "key"; default is "key"
 dlq:
   disabled: false # disable dead letter queue
@@ -121,6 +121,14 @@ Now you need to run consumer with a callback function.
 There is 2 options to run consumer, batch or single (__WithCallbackBatch__ or __WithCallback__).  
 Default decoder is json, but you can change it with __WithDecode__ option.  
 If you use `[]byte` as data type then raw data will be passed to the callback function, batch consumer like `[][]byte` type.
+
+With `concurrent.enabled: true`, both single and batch consumers use the configured grouping even when `process: 1`.
+`process` only limits simultaneous work: setting it to 1 processes groups serially, rather than switching to ordinary ungrouped processing.
+For `key` and `partition`, records stay in their groups, subject to `min_size` merging; `batch_count` is not an upper limit for these groups.
+
+For __WithCallbackBatch__ with concurrent `mix` grouping, an unset or nonpositive `run_size` defaults to `batch_count * process` so a full run can supply one batch per worker.
+With `process: 1`, this is simply `batch_count`. An explicit positive `run_size` is always preserved.
+Single consumers, key/partition grouping, and disabled concurrency keep the `batch_count` default.
 
 ```go
 // example single consumer

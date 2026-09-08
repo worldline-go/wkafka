@@ -4,10 +4,26 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
+
+func TestClientCallTrigger(t *testing.T) {
+	c := &Client{}
+	c.callTrigger(t.Context())
+
+	called := make(chan context.Context, 1)
+	c.AddTrigger(func(ctx context.Context) { called <- ctx })
+	c.callTrigger(t.Context())
+	select {
+	case ctx := <-called:
+		require.Equal(t, t.Context(), ctx)
+	case <-time.After(5 * time.Second):
+		t.Fatal("registered trigger was not called")
+	}
+}
 
 type consumerFunc func(context.Context, client) error
 

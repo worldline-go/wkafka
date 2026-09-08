@@ -115,6 +115,7 @@ func (c *groupKey) IsEnough() bool {
 }
 
 func (c *groupKey) Reset() {
+	clear(c.allRecords)
 	c.allRecords = c.allRecords[:0]
 	c.records = make(map[string][]*Record)
 	c.count = 0
@@ -146,12 +147,17 @@ func (c *groupKey) Merge() {
 	mergeGroup(c.min, c.records)
 }
 
+type topicPartition struct {
+	topic     string
+	partition int32
+}
+
 type groupPartition struct {
 	size       int
 	runSize    int
 	min        int
 	count      int
-	records    map[int32][]*Record
+	records    map[topicPartition][]*Record
 	allRecords []*Record
 }
 
@@ -168,7 +174,7 @@ func newGroupPartition(size, runSize, min int) *groupPartition {
 		size:       size,
 		runSize:    runSize,
 		min:        min,
-		records:    make(map[int32][]*Record),
+		records:    make(map[topicPartition][]*Record),
 		allRecords: make([]*Record, 0, runSize),
 	}
 }
@@ -178,11 +184,12 @@ func (c *groupPartition) Add(r *Record) {
 
 	c.allRecords = append(c.allRecords, r)
 
-	if _, ok := c.records[r.Partition]; !ok {
-		c.records[r.Partition] = make([]*Record, 0, c.size)
+	key := topicPartition{topic: r.Topic, partition: r.Partition}
+	if _, ok := c.records[key]; !ok {
+		c.records[key] = make([]*Record, 0, c.size)
 	}
 
-	c.records[r.Partition] = append(c.records[r.Partition], r)
+	c.records[key] = append(c.records[key], r)
 }
 
 func (c *groupPartition) IsEnough() bool {
@@ -190,8 +197,9 @@ func (c *groupPartition) IsEnough() bool {
 }
 
 func (c *groupPartition) Reset() {
+	clear(c.allRecords)
 	c.allRecords = c.allRecords[:0]
-	c.records = make(map[int32][]*Record)
+	c.records = make(map[topicPartition][]*Record)
 	c.count = 0
 }
 
@@ -245,6 +253,7 @@ func (c *groupMix) IsEnough() bool {
 }
 
 func (c *groupMix) Reset() {
+	clear(c.records)
 	c.records = c.records[:0]
 }
 
@@ -298,6 +307,10 @@ func (c *group) NewGroup() groupRecords {
 // ////////////////
 
 func mergeGroup[T comparable](min int, m map[T][]*Record) {
+	if min <= 1 {
+		return
+	}
+
 	var shortLists []T
 	var validTargets []T
 

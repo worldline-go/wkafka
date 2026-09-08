@@ -3,6 +3,7 @@ package wkafka
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -46,6 +47,7 @@ type ConsumerConfig struct {
 	// BatchCount is a number of messages processed in a single batch.
 	//  - Processing count could be less than BatchCount if the batch is not full.
 	//  - Usable with WithCallbackBatch
+	//  - Caps ordinary and concurrent mix batches; key/partition groups can exceed it.
 	//  - Default is 100.
 	BatchCount int `cfg:"batch_count" json:"batch_count"`
 	// DLQ is a dead letter queue configuration.
@@ -69,11 +71,6 @@ type ConsumerConfig struct {
 
 	// Concurrent is a configuration for concurrent processing.
 	Concurrent ConcurrentConfig `cfg:"concurrent" json:"concurrent"`
-	// RecoverAfterProcessingError is a configuration of expected consumer behavior after processing returns any error.
-	// If it is true, any error besides ErrFatal will be just logged and won't cause a service restart.
-	// It is false as a default to ensure backwards compatibility.
-	// It works only when ConcurrentConfig.Enabled is set to true and ConcurrentConfig.Process is greater than 1.
-	RecoverAfterProcessingError bool `cfg:"recover_after_processing_error" json:"recover_after_processing_error" default:"false"`
 }
 
 type ConcurrentConfig struct {
@@ -81,8 +78,9 @@ type ConcurrentConfig struct {
 	//  - Default is false.
 	Enabled bool `cfg:"enabled" json:"enabled"`
 
-	// Process is a number of concurrent goroutines to process messages.
-	//  - Default is 10.
+	// Process limits the number of goroutines simultaneously processing messages.
+	//  - With Enabled, 1 processes groups serially without changing grouping semantics.
+	//  - Nonpositive values default to 10.
 	Process int `cfg:"process" json:"process"`
 
 	// MinSize is the minimum size of the bucket. Default is 1.
@@ -90,7 +88,10 @@ type ConcurrentConfig struct {
 	MinSize int `cfg:"min_size" json:"min_size"`
 
 	// RunSize is a number of messages to process in a single run.
-	//  - Default is batch_count.
+	//  - When nonpositive, defaults to batch_count * process for concurrent mix batch
+	//    consumers (WithCallbackBatch), and batch_count otherwise.
+	//  - With process = 1, the mix batch default is also batch_count.
+	//  - Explicit positive values are preserved in every mode.
 	RunSize int `cfg:"run_size" json:"run_size"`
 
 	// Type is a type of concurrent processing.
@@ -213,6 +214,17 @@ func dlqProcessBatch[T any](fn func(ctx context.Context, msg []T) error) func(ct
 //   - If [][]byte then default decode function will be skipped.
 func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallBackFunc {
 	return func(o *optionConsumer) error {
+		groupConfig := *o.Client.consumerGroup
+		// New normalizes Process to a positive limit. Only mix batch consumers need
+		// one batch per worker by default; keep explicit RunSize and other modes unchanged.
+		if o.Client.consumerRunSizeDefault && o.ConsumerConfig.Concurrent.Enabled &&
+			groupConfig.Type == groupTypeMix {
+			if groupConfig.BatchSize > math.MaxInt/o.ConsumerConfig.Concurrent.Process {
+				return fmt.Errorf("validate consumer config: default concurrent run_size overflows int: batch_count * process")
+			}
+			groupConfig.RunSize = groupConfig.BatchSize * o.ConsumerConfig.Concurrent.Process
+		}
+
 		decode, produceDLQ := getDecodeProduceDLQ[T](o)
 
 		customer := customer[T]{
@@ -227,7 +239,7 @@ func WithCallbackBatch[T any](fn func(ctx context.Context, msg []T) error) CallB
 			customer:         &customer,
 			Process:          fn,
 			PartitionHandler: o.Client.partitionHandler,
-			Group:            o.Client.consumerGroup.NewGroup(),
+			Group:            groupConfig.NewGroup(),
 		}
 
 		if o.ConsumerConfig.DLQ.ConsumerDisabled {

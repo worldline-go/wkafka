@@ -31,10 +31,11 @@ type Client struct {
 	partitionHandlerDLQ *partitionHandler
 	consumerGroup       *group
 
-	clientID       []byte
-	consumerConfig *ConsumerConfig
-	consumerMutex  sync.RWMutex
-	logger         Logger
+	clientID               []byte
+	consumerConfig         *ConsumerConfig
+	consumerRunSizeDefault bool
+	consumerMutex          sync.RWMutex
+	logger                 Logger
 
 	dlqRecord       DLQRecord
 	dlqRetryTrigger func(opts []OptionDLQTriggerFn)
@@ -72,6 +73,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	// validate client and add defaults to consumer config
+	consumerRunSizeDefault := o.ConsumerConfig != nil && o.ConsumerConfig.Concurrent.RunSize <= 0
 	if o.ConsumerConfig != nil {
 		if err := configApply(cfg.Consumer, o.ConsumerConfig, o.AppName, o.Logger); err != nil {
 			return nil, fmt.Errorf("validate config: %w", err)
@@ -83,9 +85,10 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	c := &Client{
-		consumerConfig: o.ConsumerConfig,
-		logger:         o.Logger,
-		clientID:       []byte(o.ClientID),
+		consumerRunSizeDefault: consumerRunSizeDefault,
+		consumerConfig:         o.ConsumerConfig,
+		logger:                 o.Logger,
+		clientID:               []byte(o.ClientID),
 		hook: &hooker{
 			ctx: context.Background(),
 		},
@@ -488,6 +491,10 @@ func (c *Client) DLQRetry(opts ...OptionDLQTriggerFn) {
 }
 
 func (c *Client) callTrigger(ctx context.Context) {
+	if len(c.trigger) == 0 {
+		return
+	}
+
 	go func() {
 		for _, t := range c.trigger {
 			if ctx.Err() != nil {

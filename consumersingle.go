@@ -9,12 +9,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-//go:generate mockgen -typed -destination=mocks/client.go -source=consumersingle.go -package mocks client
 type client interface {
 	MarkCommitRecords(...*kgo.Record)
-	PauseFetchPartitions(map[string][]int32) map[string][]int32
-	SetOffsets(map[string]map[int32]kgo.EpochOffset)
-	ResumeFetchPartitions(map[string][]int32)
 	AllowRebalance()
 	PollRecords(ctx context.Context, maxPollRecords int) kgo.Fetches
 }
@@ -42,10 +38,6 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl client) error {
 		// if block on poll then allow rebalance
 		cl.AllowRebalance()
 
-		if c.PartitionHandler.shouldResetRewind() {
-			c.PartitionHandler.resetRewind()
-		}
-
 		fetch := cl.PollRecords(ctx, c.Cfg.MaxPollRecords)
 		if fetch.IsClientClosed() {
 			return errClientClosed
@@ -68,7 +60,8 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl client) error {
 			continue
 		}
 
-		if c.Cfg.Concurrent.Enabled && c.Cfg.Concurrent.Process > 1 {
+		// Enabled selects grouping even when Process limits work to one goroutine.
+		if c.Cfg.Concurrent.Enabled {
 			if err := c.iterationConcurrent(ctx, cl, fetch); err != nil {
 				return err
 			}
@@ -87,57 +80,14 @@ func (c *consumerSingle[T]) Consume(ctx context.Context, cl client) error {
 ////////////////////
 
 func (c *consumerSingle[T]) iterationConcurrent(ctx context.Context, cl client, fetch kgo.Fetches) error {
-	// Process records from different partitions in separate loops.
-	for _, f := range fetch {
-		for _, topic := range f.Topics {
-			for _, partition := range topic.Partitions {
-				singlePartitionFetch := &kgo.Fetches{
-					{
-						Topics: []kgo.FetchTopic{
-							{
-								Topic:   topic.Topic,
-								TopicID: topic.TopicID,
-								Partitions: []kgo.FetchPartition{
-									partition,
-								},
-							},
-						},
-					},
-				}
-
-				err := c.iterationRecords(ctx, cl, singlePartitionFetch.RecordIter())
-				if err != nil {
-					// We don't want to restart the service and only continue to the next partition.
-					if c.Cfg.RecoverAfterProcessingError && !errors.Is(err, ErrFatal) {
-						c.Logger.Warn("skipping to the next partition",
-							"error", err,
-						)
-
-						continue
-					}
-
-					return fmt.Errorf("error while processing partition: %w", err)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl client, recordIter *kgo.FetchesRecordIter) error {
 	c.Group.Reset()
 
+	recordIter := fetch.RecordIter()
 	for !recordIter.Done() {
 		r := recordIter.Next()
 
-		// Check if the partition is being rewound and mark it as done.
-		if c.PartitionHandler.isPartitionRewinding(r.Topic, r.Partition) && !c.PartitionHandler.shouldSkipRecord(r) {
-			c.PartitionHandler.markPartitionRewound(r.Topic, r.Partition)
-		}
-
-		// Check if partition is revoked or being rewound. If not then add to group.
-		if !c.PartitionHandler.IsRevokedRecord(r) && !c.PartitionHandler.shouldSkipRecord(r) {
+		// Check if partition is revoked before adding to the group.
+		if !c.PartitionHandler.IsRevokedRecord(r) {
 			c.Group.Add(r)
 		}
 
@@ -181,27 +131,6 @@ func (c *consumerSingle[T]) iterationRecords(ctx context.Context, cl client, rec
 		}
 
 		if err := errGroup.Wait(); err != nil {
-			// Rewind partition to the earliest unconsumed message to try to reconsume it again.
-			rewindRecord := c.Group.AllRecords()[0]
-
-			cl.PauseFetchPartitions(map[string][]int32{
-				rewindRecord.Topic: {rewindRecord.Partition},
-			})
-
-			cl.SetOffsets(map[string]map[int32]kgo.EpochOffset{
-				rewindRecord.Topic: {
-					rewindRecord.Partition: kgo.NewOffset().At(rewindRecord.Offset).EpochOffset(),
-				},
-			})
-
-			cl.ResumeFetchPartitions(map[string][]int32{
-				rewindRecord.Topic: {rewindRecord.Partition},
-			})
-
-			// SetOffsets does not discard already buffered fetches, so we need to skip all the newer records from this partition
-			// until we fetch the one that we want to rewind to.
-			c.PartitionHandler.rewindPartitionToUncommittedOffset(rewindRecord.Topic, rewindRecord.Partition, rewindRecord.Offset)
-
 			return fmt.Errorf("wait group failed: %w", err)
 		}
 

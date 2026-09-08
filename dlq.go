@@ -117,6 +117,10 @@ func (d *dlqProcess[T]) iteration(ctx context.Context, r *kgo.Record) error {
 
 	firstIteration := true
 	defer func() {
+		if firstIteration {
+			return
+		}
+
 		d.setDLQRecord(nil, time.Time{}, nil)
 		d.setCheckFunc(nil)
 		d.callTrigger(ctx)

@@ -54,7 +54,8 @@ func (c *consumerBatch[T]) Consume(ctx context.Context, cl client) error {
 			continue
 		}
 
-		if c.Cfg.Concurrent.Enabled && c.Cfg.Concurrent.Process > 1 {
+		// Enabled selects grouping even when Process limits work to one goroutine.
+		if c.Cfg.Concurrent.Enabled {
 			if err := c.batchIterationConcurrent(ctx, cl, fetch); err != nil {
 				return err
 			}
