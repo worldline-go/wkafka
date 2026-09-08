@@ -14,6 +14,58 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+func TestClientTypedConsume(t *testing.T) {
+	for _, batch := range []bool{false, true} {
+		name := "single"
+		if batch {
+			name = "batch"
+		}
+		t.Run(name, func(t *testing.T) {
+			c, err := New(t.Context(), Config{Brokers: []string{"127.0.0.1:1"}}, WithPing(false), WithConsumer(ConsumerConfig{GroupID: "test"}))
+			require.NoError(t, err)
+			defer c.Close()
+
+			stop := errors.New("stop before polling")
+			called := false
+			callback := func(ctx context.Context, value string) error {
+				called = true
+				require.Equal(t, t.Context(), ctx)
+				require.Equal(t, "decoded", value)
+				return nil
+			}
+			opts := []OptionConsumer{
+				WithDecode(func([]byte, *Record) (string, error) { return "decoded", nil }),
+				func(o *optionConsumer) error {
+					if batch {
+						consumer, ok := o.Consumer.(*consumerBatch[string])
+						require.True(t, ok)
+						value, err := consumer.Decode(nil, nil)
+						require.NoError(t, err)
+						require.NoError(t, consumer.Process(t.Context(), []string{value}))
+					} else {
+						consumer, ok := o.Consumer.(*consumerSingle[string])
+						require.True(t, ok)
+						value, err := consumer.Decode(nil, nil)
+						require.NoError(t, err)
+						require.NoError(t, consumer.Process(t.Context(), value))
+					}
+					return stop
+				},
+			}
+			if batch {
+				err = c.ConsumeBatch(t.Context(), func(ctx context.Context, values []string) error {
+					require.Len(t, values, 1)
+					return callback(ctx, values[0])
+				}, opts...)
+			} else {
+				err = c.ConsumeSingle[string](t.Context(), callback, opts...)
+			}
+			require.ErrorIs(t, err, stop)
+			require.True(t, called)
+		})
+	}
+}
+
 func TestCallbackRunSizeDefaults(t *testing.T) {
 	for _, tt := range []struct {
 		name                      string

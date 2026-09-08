@@ -13,6 +13,8 @@ go get github.com/worldline-go/wkafka
 
 This library is using [franz-go](https://github.com/twmb/franz-go).
 
+Requires Go 1.27 or later.
+
 ## Usage
 
 First set the connection config to create a new kafka client.  
@@ -132,10 +134,16 @@ Single consumers, key/partition grouping, and disabled concurrency keep the `bat
 
 ```go
 // example single consumer
-if err := client.Consume(ctx, wkafka.WithCallback(ProcessSingle)); err != nil {
+if err := client.ConsumeSingle(ctx, ProcessSingle); err != nil {
   return fmt.Errorf("consume: %w", err)
 }
 ```
+
+For batches, use `client.ConsumeBatch(ctx, ProcessBatch)`, where the callback accepts
+`[]T` instead of `T`. Both methods infer `T` from the callback and accept the same
+options as `Consume`, including `WithDecode[T]`. Default decoding is JSON; use
+`T = []byte` for raw messages (`[][]byte` in a batch callback).
+The existing `Consume` API with `WithCallback` or `WithCallbackBatch` remains available.
 
 Send record to dead letter queue, use __WrapErrDLQ__ function with to wrap the error and it will be send to dead letter queue.
 
@@ -159,7 +167,7 @@ Create a producer based of client and specific data type.
 > Use __WithHook__ to get metadata of the record and modify to produce record.
 
 ```go
-producer, err := wkafka.NewProducer[*Data](client, "test", wkafka.WithHook(ProduceHook))
+producer, err := client.NewProducer[*Data]("test", wkafka.WithHook(ProduceHook))
 if err != nil {
   return err
 }

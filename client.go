@@ -327,6 +327,20 @@ func (c *Client) GroupID() string {
 	return c.consumerConfig.GroupID
 }
 
+// ConsumeSingle consumes messages with a typed callback, one message at a time.
+// Like Consume, it requires consumer config and must only be run once per client.
+// Options such as WithDecode are applied after the callback is configured.
+func (c *Client) ConsumeSingle[T any](ctx context.Context, callback func(context.Context, T) error, opts ...OptionConsumer) error {
+	return c.Consume(ctx, WithCallback(callback), opts...)
+}
+
+// ConsumeBatch consumes messages with a typed batch callback.
+// Like Consume, it requires consumer config and must only be run once per client.
+// Options such as WithDecode are applied after the callback is configured.
+func (c *Client) ConsumeBatch[T any](ctx context.Context, callback func(context.Context, []T) error, opts ...OptionConsumer) error {
+	return c.Consume(ctx, WithCallbackBatch(callback), opts...)
+}
+
 // Consume starts consuming messages from kafka and blocks until context is done or an error occurs.
 //   - Only works if client is created with consumer config.
 //   - Just run one time.
@@ -397,7 +411,13 @@ func (c *Client) Consume(ctx context.Context, callback CallBackFunc, opts ...Opt
 	return nil
 }
 
-// Produce sends a message to kafka. For type producer check wkafka.NewProducer.
+// NewProducer creates a typed producer using this client's Kafka connection.
+// It accepts the same options as the package-level NewProducer function.
+func (c *Client) NewProducer[T any](topic string, opts ...OptionProducer) (*Producer[T], error) {
+	return NewProducer[T](c, topic, opts...)
+}
+
+// ProduceRaw sends messages to kafka. For a typed producer, use Client.NewProducer.
 func (c *Client) ProduceRaw(ctx context.Context, records []*kgo.Record) error {
 	result := c.Kafka.ProduceSync(ctx, records...)
 

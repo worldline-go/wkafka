@@ -2,9 +2,11 @@ package wkafka
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -12,6 +14,56 @@ type testData struct {
 	Name    string
 	Topic   string
 	Details map[string]any
+}
+
+func TestClientNewProducer(t *testing.T) {
+	client := &Client{clientID: []byte("test-client")}
+
+	t.Run("defaults", func(t *testing.T) {
+		producer, err := client.NewProducer[string]("test")
+		require.NoError(t, err)
+		assert.Equal(t, "test", producer.GetTopic())
+		record, err := producer.prepare("message")
+		require.NoError(t, err)
+		assert.Equal(t, []byte(`"message"`), record.Value)
+		assert.Equal(t, []Header{{Key: HeaderServiceKey, Value: client.clientID}}, record.Headers)
+		require.NotNil(t, producer.produceRaw)
+
+		bytesProducer, err := client.NewProducer[[]byte]("bytes")
+		require.NoError(t, err)
+		record, err = bytesProducer.prepare([]byte("raw"))
+		require.NoError(t, err)
+		assert.Equal(t, []byte("raw"), record.Value)
+	})
+
+	t.Run("options", func(t *testing.T) {
+		producer, err := client.NewProducer[string]("test",
+			WithHeaders[string](Header{Key: "custom", Value: []byte("value")}),
+			WithEncoder(func(data string) ([]byte, error) { return []byte(data), nil }),
+			WithHook(func(data string, record *Record) error {
+				record.Key = []byte(data)
+				return nil
+			}),
+		)
+		require.NoError(t, err)
+		record, err := producer.prepare("message")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("message"), record.Value)
+		assert.Equal(t, []byte("message"), record.Key)
+		assert.Equal(t, []Header{
+			{Key: HeaderServiceKey, Value: client.clientID},
+			{Key: "custom", Value: []byte("value")},
+		}, record.Headers)
+	})
+
+	t.Run("option error", func(t *testing.T) {
+		wantErr := errors.New("invalid option")
+		producer, err := client.NewProducer[string]("test", func(producerConfigInf) error {
+			return wantErr
+		})
+		assert.Nil(t, producer)
+		assert.ErrorIs(t, err, wantErr)
+	})
 }
 
 func produceHook(d *testData, r *kgo.Record) error {
