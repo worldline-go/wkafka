@@ -15,6 +15,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/suite"
+	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/worldline-go/logz"
 	"github.com/worldline-go/test/container/containerkafka"
 	"github.com/worldline-go/test/utils/kafkautils"
@@ -336,6 +337,80 @@ func (s *ConsumerSuite) GroupConsuming() {
 			}
 		})
 	}
+}
+
+func (s *ConsumerSuite) TestConsumerCommitMarkedOffsetsOnClose() {
+	testName := strings.ReplaceAll(s.T().Name(), "/", "-")
+	topicResp, err := s.container.Admin.CreateTopic(s.T().Context(), 1, 1, nil, testName)
+	s.NoError(err)
+	s.NoError(topicResp.Err)
+
+	messages := []any{
+		wkafka.Record{Value: []byte("msg-1"), Partition: -1},
+		wkafka.Record{Value: []byte("msg-2"), Partition: -1},
+		wkafka.Record{Value: []byte("msg-3"), Partition: -1},
+		wkafka.Record{Value: []byte("msg-4"), Partition: -1},
+		wkafka.Record{Value: []byte("msg-5"), Partition: -1},
+	}
+	s.container.Publish(s.T(), testName, messages...)
+
+	groupID := "test-commit-on-close"
+
+	// Disable the autocommit ticker so the only way offsets reach the broker
+	// is the commit done during OnPartitionsRevoked (revoke commit).
+	consumer, err := wkafka.New(
+		s.T().Context(), s.container.Config,
+		wkafka.WithConsumer(wkafka.ConsumerConfig{
+			GroupID: groupID,
+			Topics:  []string{testName},
+		}),
+		wkafka.WithKGOOptions(kgo.AutoCommitInterval(time.Hour)),
+	)
+	s.NoError(err)
+
+	ctx, cancel := context.WithCancel(s.T().Context())
+	defer cancel()
+
+	processed := make(chan int, len(messages))
+	go func() {
+		// errClientClosed is expected on Close
+		_ = consumer.ConsumeBatch(ctx, func(_ context.Context, batch [][]byte) error {
+			processed <- len(batch)
+
+			return nil
+		})
+	}()
+
+	// wait until all messages are processed
+	total := 0
+	for total < len(messages) {
+		select {
+		case n := <-processed:
+			total += n
+		case <-time.After(30 * time.Second):
+			s.T().Fatalf("timeout waiting for processed messages, got %d of %d", total, len(messages))
+		}
+	}
+
+	// control check: with the autocommit ticker disabled no offset can be committed yet
+	offsets, err := s.container.Admin.FetchOffsets(s.T().Context(), groupID)
+	s.NoError(err)
+	if resp, ok := offsets.Lookup(testName, 0); ok && resp.Err == nil {
+		s.T().Errorf("unexpected committed offset %d before close, autocommit must be disabled", resp.At)
+	}
+
+	// give the consumer loop time to mark the records it processed
+	time.Sleep(1 * time.Second)
+
+	// graceful shutdown: Close triggers OnPartitionsRevoked, which must commit
+	consumer.Close()
+
+	offsets, err = s.container.Admin.FetchOffsets(s.T().Context(), groupID)
+	s.NoError(err)
+	resp, ok := offsets.Lookup(testName, 0)
+	s.True(ok, "no committed offset found after close")
+	s.NoError(resp.Err)
+	s.Equal(int64(len(messages)), resp.At, "all processed messages must be committed on close")
 }
 
 func (s *ConsumerSuite) TestConsumerDLQ() {

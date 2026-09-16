@@ -96,7 +96,13 @@ func partitionLost(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(con
 }
 
 func partitionRevoked(h *partitionHandler, fn func(...OptionDLQTriggerFn)) func(context.Context, *kgo.Client, map[string][]int32) {
-	return func(_ context.Context, _ *kgo.Client, partitions map[string][]int32) {
+	return func(ctx context.Context, cl *kgo.Client, partitions map[string][]int32) {
+		// Overriding OnPartitionsRevoked disables franz-go's default revoke commit,
+		// so marked offsets must be committed here before partitions are given away.
+		if err := cl.CommitMarkedOffsets(ctx); err != nil {
+			h.logger.Warn("commit marked offsets on revoke failed", "error", err)
+		}
+
 		if len(partitions) == 0 {
 			return
 		}
