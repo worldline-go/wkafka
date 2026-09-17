@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -13,10 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/suite"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 	"github.com/worldline-go/test/container/containerkafka"
 	"github.com/worldline-go/test/utils/kafkautils"
 	"golang.org/x/sync/errgroup"
@@ -602,7 +601,7 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 			default:
 			}
 
-			logger := log.With().Str("consumer", "kafka-1").Logger()
+			logger := slog.Default().With("consumer", "kafka-1")
 			kafka1, err := wkafka.New(
 				ctx, s.container.Config,
 				wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -610,7 +609,7 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 					Topics:         []string{testName},
 					MaxPollRecords: 4,
 				}),
-				wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+				wkafka.WithLogger(logger),
 			)
 			s.NoError(err)
 
@@ -634,7 +633,7 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 			default:
 			}
 
-			logger := log.With().Str("consumer", "kafka-2").Logger()
+			logger := slog.Default().With("consumer", "kafka-2")
 			kafka2, err := wkafka.New(
 				ctx, s.container.Config,
 				wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -645,7 +644,7 @@ func (s *ConsumerSuite) TestConsumerRebalance() {
 						Topic:            testName + "-dlq",
 					},
 				}),
-				wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+				wkafka.WithLogger(logger),
 			)
 			s.NoError(err)
 
@@ -725,7 +724,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentKey() {
 		return nil
 	}
 
-	logger := log.With().Str("consumer", "kafka-concurrent-key").Logger()
+	logger := slog.Default().With("consumer", "kafka-concurrent-key")
 	kafka, err := wkafka.New(
 		ctx, s.container.Config,
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -736,7 +735,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentKey() {
 				Type:    wkafka.GroupTypeKeyStr,
 			},
 		}),
-		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+		wkafka.WithLogger(logger),
 	)
 	s.NoError(err)
 
@@ -808,7 +807,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentPartition() {
 		return nil
 	}
 
-	logger := log.With().Str("consumer", "kafka-concurrent-partition").Logger()
+	logger := slog.Default().With("consumer", "kafka-concurrent-partition")
 	kafka, err := wkafka.New(
 		ctx, s.container.Config,
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -819,7 +818,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentPartition() {
 				Type:    wkafka.GroupTypePartitionStr,
 			},
 		}),
-		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+		wkafka.WithLogger(logger),
 	)
 	s.NoError(err)
 
@@ -867,7 +866,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 		return nil
 	}
 
-	logger := log.With().Str("consumer", "kafka-concurrent-mix").Logger()
+	logger := slog.Default().With("consumer", "kafka-concurrent-mix")
 	kafka, err := wkafka.New(
 		ctx, s.container.Config,
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -880,7 +879,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentMix() {
 				// Process: 100_000,
 			},
 		}),
-		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+		wkafka.WithLogger(logger),
 	)
 	s.NoError(err)
 
@@ -958,7 +957,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 		return nil
 	}
 
-	logger := log.With().Str("consumer", "kafka-concurrent-mix-multi").Logger()
+	logger := slog.Default().With("consumer", "kafka-concurrent-mix-multi")
 	kafka, err := wkafka.New(
 		ctx, s.container.Config,
 		wkafka.WithConsumer(wkafka.ConsumerConfig{
@@ -972,7 +971,7 @@ func (s *ConsumerSuite) TestConsumerConcurrentMixMultiTopic() {
 				Process: 20,
 			},
 		}),
-		wkafka.WithLogger(logz.AdapterKV{Log: logger}),
+		wkafka.WithLogger(logger),
 	)
 
 	s.NoError(err)

@@ -116,8 +116,8 @@ func WithConsumer(cfg ConsumerConfig) Option {
 }
 
 // WithLogger configures the client to use the provided logger.
-//   - For zerolog logz.AdapterKV{Log: logger} can usable.
-//   - Default is using zerolog's global logger.
+//   - *slog.Logger implements the Logger interface, use it directly.
+//   - Default is using slog's default logger.
 //   - Set nil to disable logging.
 func WithLogger(logger Logger) Option {
 	return func(o *options) {

@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v7"
-	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/worldline-go/logz"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -61,7 +60,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 		ClientID:          DefaultClientID,
 		AutoTopicCreation: true,
 		AppName:           idProgname,
-		Logger:            logz.AdapterKV{Log: log.Logger},
+		Logger:            slog.Default(),
 		Ping:              true,
 		PingRetry:         false,
 	}
