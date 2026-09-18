@@ -19,12 +19,19 @@ type Config struct {
 	Brokers  []string       `cfg:"brokers"  json:"brokers"`
 	Security SecurityConfig `cfg:"security" json:"security"`
 	// Compressions is chosen in the order preferred based on broker support.
+	// 'none' is always appended as the last fallback.
 	// The default is to use no compression.
-	//  Available:
+	//  Available (case insensitive):
+	//  - none
 	//  - gzip
 	//  - snappy
 	//  - lz4
 	//  - zstd
+	//
+	// An optional compression level can be set with a ':<level>' suffix,
+	// it is only valid for gzip, lz4 and zstd. An out of range level falls
+	// back to the codec's default level.
+	//  compressions: ["zstd:3", "gzip:9", "snappy"]
 	Compressions []string `cfg:"compressions" json:"compressions"`
 
 	// Consumer is a pre configuration for consumer and validation.
