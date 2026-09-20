@@ -12,6 +12,7 @@ require (
 	github.com/twmb/tlscfg v1.3.0
 	github.com/worldline-go/struct2 v1.4.0
 	github.com/worldline-go/test v0.5.1
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
 )
 

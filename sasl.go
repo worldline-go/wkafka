@@ -21,7 +21,7 @@ func (c SaslConfigs) Generate() ([]sasl.Mechanism, error) {
 	for i := range c {
 		mechanism, err := c[i].Generate()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("sasl[%d]: %w", i, err)
 		}
 
 		if mechanism != nil {
@@ -35,9 +35,23 @@ func (c SaslConfigs) Generate() ([]sasl.Mechanism, error) {
 type SalsConfig struct {
 	Plain SaslPlain `cfg:"plain" json:"plain"`
 	SCRAM SaslSCRAM `cfg:"scram" json:"scram"`
+	OAuth SaslOAuth `cfg:"oauth" json:"oauth"`
 }
 
+// SaslConfig is the correctly spelled alias of SalsConfig.
+type SaslConfig = SalsConfig
+
 func (c SalsConfig) Generate() (sasl.Mechanism, error) {
+	enabled := 0
+	for _, v := range []bool{c.Plain.Enabled, c.SCRAM.Enabled, c.OAuth.Enabled} {
+		if v {
+			enabled++
+		}
+	}
+	if enabled > 1 {
+		return nil, fmt.Errorf("only one SASL mechanism may be enabled per config entry")
+	}
+
 	if c.Plain.Enabled {
 		return c.Plain.Generate()
 	}
@@ -45,11 +59,14 @@ func (c SalsConfig) Generate() (sasl.Mechanism, error) {
 	if c.SCRAM.Enabled {
 		return c.SCRAM.Generate()
 	}
+	if c.OAuth.Enabled {
+		return c.OAuth.Generate()
+	}
 
 	return nil, nil
 }
 
-// SaslPlain contains options for SASL/SCRAM authentication.
+// SaslPlain contains options for SASL/PLAIN authentication.
 type SaslPlain struct {
 	// Enabled this config.
 	Enabled bool `cfg:"enabled" json:"enabled"`
@@ -67,6 +84,7 @@ func (s SaslPlain) Generate() (sasl.Mechanism, error) {
 	}
 
 	auth := plain.Auth{
+		Zid:  s.Zid,
 		User: s.User,
 		Pass: s.Pass,
 	}
@@ -78,7 +96,7 @@ type SaslSCRAM struct {
 	// Enabled this config.
 	Enabled bool `cfg:"enabled" json:"enabled"`
 	// Algorithm valid values are "SCRAM-SHA-256" and "SCRAM-SHA-512".
-	// Empty is plain SASL.
+	// Required when SCRAM is enabled.
 	Algorithm string `cfg:"algorithm" json:"algorithm"`
 	// Zid is an optional authorization ID to use in authenticating.
 	Zid string `cfg:"zid" json:"zid"`

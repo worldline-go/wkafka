@@ -51,6 +51,57 @@ plugins: # additional configuration for plugins
     key: value # plugin's key value configuration
 ```
 
+### OAuth authentication
+
+Enable at most one mechanism (`plain`, `scram`, or `oauth`) per SASL list entry.
+Separate entries can advertise different mechanisms in preference order.
+`SaslConfig` is an alias for the existing `SalsConfig` Go type.
+
+For OAuth client credentials:
+
+```yaml
+security:
+  tls:
+    enabled: true
+  sasl:
+    - oauth:
+        enabled: true
+        token_url: https://identity.example.com/realms/apps/protocol/openid-connect/token
+        client_id: kafka-worker
+        client_secret: your-secret
+        scopes: [kafka]
+        timeout: 10s
+        zid: ""
+        extensions: {}
+```
+
+Tokens are fetched lazily during authentication, cached per Kafka client, and
+refreshed near expiry using the token endpoint's `expires_in`. Requests use the
+current authentication context and a timeout (default 10 seconds). The broker
+must support OAUTHBEARER and trust the issuing identity provider.
+
+Alternatively, set `token` for a static bearer token, or supply a Go callback:
+
+```go
+cfg.Security.SASL = wkafka.SaslConfigs{{
+    OAuth: wkafka.SaslOAuth{
+        Enabled: true,
+        TokenProvider: func(ctx context.Context) (oauth.Auth, error) {
+            token, err := tokenProvider(ctx) // Your token acquisition/renewal function.
+            return oauth.Auth{Token: token}, err
+        },
+    },
+}}
+```
+
+The callback uses `github.com/twmb/franz-go/pkg/sasl/oauth`. It must be safe for
+concurrent calls and manage caching/renewal itself. Its returned `Zid` and
+`Extensions` are used as-is. Configure exactly one of static token, client
+credentials, or callback; static tokens are not renewed.
+
+Security config applies to both the main and DLQ clients, including when using
+`WithKGOOptionsDLQ`. TLS client certificates require both `cert_file` and `key_file`.
+
 ### Consumer
 
 For creating a consumer we need to give additional consumer config when initializing the client.

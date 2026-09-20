@@ -2,6 +2,7 @@ package wkafka
 
 import (
 	"crypto/tls"
+	"fmt"
 
 	"github.com/twmb/tlscfg"
 )
@@ -34,6 +35,9 @@ type TLSConfig struct {
 func (t TLSConfig) Generate() (*tls.Config, error) {
 	if !t.Enabled {
 		return nil, nil
+	}
+	if (t.CertFile == "") != (t.KeyFile == "") {
+		return nil, fmt.Errorf("tls: cert_file and key_file must be provided together")
 	}
 
 	opts := []tlscfg.Opt{}
