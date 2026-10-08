@@ -97,7 +97,90 @@ cfg.Security.SASL = wkafka.SaslConfigs{{
 The callback uses `github.com/twmb/franz-go/pkg/sasl/oauth`. It must be safe for
 concurrent calls and manage caching/renewal itself. Its returned `Zid` and
 `Extensions` are used as-is. Configure exactly one of static token, client
-credentials, or callback; static tokens are not renewed.
+credentials, `gcp`, or callback; static tokens are not renewed.
+
+#### Client credentials with mutual TLS
+
+Set `tls` to present a client certificate to the token endpoint (RFC 8705).
+With a client certificate, `client_secret` is optional: when it is empty,
+`client_id` is sent in the request body and the certificate authenticates the
+client (`tls_client_auth`). When it is set, both are used.
+
+```yaml
+security:
+  tls:
+    enabled: true
+  sasl:
+    - oauth:
+        enabled: true
+        token_url: https://identity.example.com/realms/apps/protocol/openid-connect/token
+        client_id: kafka-worker
+        scopes: [kafka]
+        tls:
+          cert_file: /etc/certs/oauth/client-cert.pem
+          key_file: /etc/certs/oauth/client-key.pem
+          ca_file: /etc/certs/oauth/ca.pem   # optional, system roots otherwise
+```
+
+`oauth.tls` only applies to the token endpoint. Broker TLS is still configured
+under `security.tls`.
+
+#### Google Cloud workload identity federation (X.509)
+
+`gcp` gets Google Cloud access tokens with an X.509 client certificate
+(Workload Identity Federation over mTLS). If configured, it then impersonates
+a service account. Use the `external_account` credential file from Google;
+its `credential_source` is ignored, because `cert_file` / `key_file` are used
+instead.
+
+```yaml
+security:
+  tls:
+    enabled: true
+    cert_file: /etc/certs/kafka/client-cert.pem
+    key_file: /etc/certs/kafka/client-key.pem
+    ca_file: /etc/certs/kafka/ca.pem
+  sasl:
+    - oauth:
+        enabled: true
+        timeout: 10s
+        gcp:
+          enabled: true
+          credentials_file: /etc/certs/gcp/wif-credentials.json
+          cert_file: /etc/certs/kafka/client-cert.pem
+          key_file: /etc/certs/kafka/client-key.pem
+          format: raw            # managed_kafka for Google Managed Service for Apache Kafka
+          # lifetime: 1h         # impersonated token lifetime
+          # refresh_before: 5m   # refresh this long before expiry
+          # scopes: [https://www.googleapis.com/auth/cloud-platform]
+```
+
+Example `wif-credentials.json` (placeholder values):
+
+```json
+{
+  "type": "external_account",
+  "audience": "//iam.googleapis.com/projects/000000000000/locations/global/workloadIdentityPools/my-pool/providers/my-provider",
+  "subject_token_type": "urn:ietf:params:oauth:token-type:mtls",
+  "token_url": "https://sts.mtls.googleapis.com/v1/token",
+  "credential_source": { "certificate": { "use_default_certificate_config": true } },
+  "service_account_impersonation_url": "https://iamcredentials.mtls.googleapis.com/v1/projects/-/serviceAccounts/my-sa@my-project.iam.gserviceaccount.com:generateAccessToken"
+}
+```
+
+`audience`, `token_url` and `service_account_impersonation_url` can also be
+set directly and override the credential file. Use `format: managed_kafka` for
+Google Managed Service for Apache Kafka, which expects the token wrapped in a
+`GOOG_OAUTH2_TOKEN` JWT-like envelope. Other brokers usually expect `raw`.
+If a refresh fails, the cached token keeps being used until it actually expires.
+
+#### Inline values and certificate rotation
+
+In both `oauth.tls` and `oauth.gcp`, each of `cert`, `key`, `ca` (and
+`credentials` for `gcp`) can be given inline as PEM/JSON content instead of
+with the `_file` form. You cannot set both forms of the same value. Certificate
+files are re-read on every token refresh, so rotated certificates (for
+example from cert-manager) are picked up without a restart.
 
 Security config applies to both the main and DLQ clients, including when using
 `WithKGOOptionsDLQ`. TLS client certificates require both `cert_file` and `key_file`.

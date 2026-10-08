@@ -15,7 +15,8 @@ import (
 )
 
 // SaslOAuth configures OAUTHBEARER using exactly one of a static token,
-// client credentials, or a programmatic provider.
+// client credentials (optionally with mutual TLS), Google Cloud workload
+// identity federation, or a programmatic provider.
 type SaslOAuth struct {
 	Enabled      bool              `cfg:"enabled" json:"enabled"`
 	Zid          string            `cfg:"zid" json:"zid"`
@@ -25,27 +26,33 @@ type SaslOAuth struct {
 	ClientID     string            `cfg:"client_id" json:"client_id"`
 	ClientSecret string            `cfg:"client_secret" json:"client_secret" log:"false"`
 	Scopes       []string          `cfg:"scopes" json:"scopes"`
+	// TLS configures the client certificate and CA used for the token endpoint
+	// in client credentials mode. With a client certificate, client_secret is
+	// optional (RFC 8705 tls_client_auth).
+	TLS OAuthTLS `cfg:"tls" json:"tls"`
 	// Timeout bounds token endpoint requests; zero defaults to 10 seconds.
 	Timeout time.Duration `cfg:"timeout" json:"timeout"`
 	// TokenProvider is called for each authentication and owns token caching
 	// and renewal. It must be safe for concurrent use. Its Auth is used as-is,
 	// including Zid and Extensions, rather than merged with the config fields.
 	TokenProvider func(context.Context) (oauth.Auth, error) `cfg:"-" json:"-" log:"false"`
+	// GCP fetches tokens from Google Cloud with X.509 workload identity federation.
+	GCP SaslOAuthGCP `cfg:"gcp" json:"gcp"`
 }
 
 func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 	if !s.Enabled {
 		return nil, nil
 	}
-	credentials := s.TokenURL != "" || s.ClientID != "" || s.ClientSecret != "" || len(s.Scopes) > 0
+	credentials := s.TokenURL != "" || s.ClientID != "" || s.ClientSecret != "" || len(s.Scopes) > 0 || s.TLS.IsSet()
 	modes := 0
-	for _, set := range []bool{s.Token != "", s.TokenProvider != nil, credentials} {
+	for _, set := range []bool{s.Token != "", s.TokenProvider != nil, credentials, s.GCP.Enabled} {
 		if set {
 			modes++
 		}
 	}
 	if modes != 1 {
-		return nil, fmt.Errorf("oauth: configure exactly one of token, client credentials, or token provider")
+		return nil, fmt.Errorf("oauth: configure exactly one of token, client credentials, gcp, or token provider")
 	}
 	if s.Timeout < 0 {
 		return nil, fmt.Errorf("oauth: timeout must not be negative")
@@ -54,11 +61,36 @@ func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 		return oauth.Oauth(s.TokenProvider), nil
 	}
 	extensions := maps.Clone(s.Extensions)
+	if s.GCP.Enabled {
+		timeout := s.Timeout
+		if timeout == 0 {
+			timeout = 10 * time.Second
+		}
+		source, err := newGCPTokenSource(s.GCP, timeout)
+		if err != nil {
+			return nil, fmt.Errorf("oauth: %w", err)
+		}
+		return oauth.Oauth(func(ctx context.Context) (oauth.Auth, error) {
+			token, err := source.Token(ctx)
+			if err != nil {
+				return oauth.Auth{}, fmt.Errorf("oauth: %w", err)
+			}
+			return oauth.Auth{Token: token, Zid: s.Zid, Extensions: extensions}, nil
+		}), nil
+	}
 	if s.Token != "" {
 		return (oauth.Auth{Token: s.Token, Zid: s.Zid, Extensions: extensions}).AsMechanism(), nil
 	}
-	if s.TokenURL == "" || s.ClientID == "" || s.ClientSecret == "" {
-		return nil, fmt.Errorf("oauth: token_url, client_id and client_secret are required for client credentials")
+	var mtls *mtlsClient
+	if s.TLS.IsSet() {
+		var err error
+		if mtls, err = newMTLSClient(s.TLS); err != nil {
+			return nil, fmt.Errorf("oauth: tls: %w", err)
+		}
+	}
+	certAuth := mtls != nil && mtls.CertPEM() != ""
+	if s.TokenURL == "" || s.ClientID == "" || (s.ClientSecret == "" && !certAuth) {
+		return nil, fmt.Errorf("oauth: token_url, client_id and client_secret (or tls client certificate) are required for client credentials")
 	}
 	u, err := url.Parse(s.TokenURL)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
@@ -74,6 +106,10 @@ func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 		TokenURL:     s.TokenURL,
 		Scopes:       append([]string(nil), s.Scopes...),
 	}
+	if s.ClientSecret == "" {
+		// RFC 8705: authenticate with the certificate, send client_id in the body.
+		config.AuthStyle = oauth2.AuthStyleInParams
+	}
 	// Serialize refreshes and cache per mechanism. Use the current authentication
 	// context for each fetch, rather than retaining the first session's context.
 	var mu sync.Mutex
@@ -87,6 +123,13 @@ func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 		if !token.Valid() {
 			fetchCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
+			if mtls != nil {
+				client, err := mtls.Client()
+				if err != nil {
+					return oauth.Auth{}, fmt.Errorf("oauth: tls: %w", err)
+				}
+				fetchCtx = context.WithValue(fetchCtx, oauth2.HTTPClient, client)
+			}
 			var err error
 			token, err = config.Token(fetchCtx)
 			if err != nil {
