@@ -152,6 +152,25 @@ func TestOAuthGCPMechanismCached(t *testing.T) {
 	require.EqualValues(t, 1, f.imp.Load())
 }
 
+func TestOAuthGCPInsecureSkipVerify(t *testing.T) {
+	for _, insecure := range []bool{false, true} {
+		cfg, f := gcpTestConfig(t)
+		cfg.CA = ""
+		cfg.InsecureSkipVerify = insecure
+		s, err := newGCPTokenSource(cfg, time.Second)
+		require.NoError(t, err)
+		token, err := s.Token(t.Context())
+		if insecure {
+			require.NoError(t, err)
+			require.Equal(t, "ya29.final", token)
+			require.EqualValues(t, 1, f.sts.Load())
+			require.EqualValues(t, 1, f.imp.Load())
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
 func TestOAuthGCPManagedKafkaFormat(t *testing.T) {
 	cfg, _ := gcpTestConfig(t)
 	cfg.Format = GCPFormatManagedKafka

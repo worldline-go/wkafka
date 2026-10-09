@@ -187,6 +187,25 @@ example from cert-manager) are picked up without a restart.
 Security config applies to both the main and DLQ clients, including when using
 `WithKGOOptionsDLQ`. TLS client certificates require both `cert_file` and `key_file`.
 
+#### Disabling server certificate verification
+
+`insecure_skip_verify` defaults to `false`. Set it to `true` under
+`security.tls` (Kafka, including DLQ), `oauth.tls` (client credentials token
+endpoint), `oauth.gcp` (both Google STS and service account impersonation
+endpoints), or the Redis handler's `tls` configuration. Kafka and Redis still
+require `enabled: true` to enable TLS.
+
+```yaml
+security:
+  tls:
+    enabled: true
+    insecure_skip_verify: true
+```
+
+**Warning:** This disables server certificate chain and hostname verification,
+making the connection vulnerable to man-in-the-middle attacks. Prefer configuring
+`ca_file` (or inline `ca` for OAuth/GCP); do not use this option in production.
+
 ### Consumer
 
 For creating a consumer we need to give additional consumer config when initializing the client.

@@ -16,6 +16,8 @@ import (
 // file forms of the same value cannot be combined. Files are re-read on each
 // token refresh so rotated certificates are picked up without restart.
 type OAuthTLS struct {
+	// InsecureSkipVerify disables server certificate and hostname verification. Unsafe for production.
+	InsecureSkipVerify bool `cfg:"insecure_skip_verify" json:"insecure_skip_verify"`
 	// Cert is the PEM client certificate, chain allowed (leaf first).
 	Cert     string `cfg:"cert" json:"cert"`
 	CertFile string `cfg:"cert_file" json:"cert_file"`
@@ -26,9 +28,9 @@ type OAuthTLS struct {
 	CAFile string `cfg:"ca_file" json:"ca_file"`
 }
 
-// IsSet reports whether any certificate value is configured.
+// IsSet reports whether any TLS option is configured.
 func (t OAuthTLS) IsSet() bool {
-	return t.Cert != "" || t.CertFile != "" || t.Key != "" || t.KeyFile != "" || t.CA != "" || t.CAFile != ""
+	return t.InsecureSkipVerify || t.Cert != "" || t.CertFile != "" || t.Key != "" || t.KeyFile != "" || t.CA != "" || t.CAFile != ""
 }
 
 // mtlsClient builds an HTTP client from OAuthTLS and rebuilds it when the
@@ -122,7 +124,7 @@ func (m *mtlsClient) reload() (bool, error) {
 }
 
 func (m *mtlsClient) build() error {
-	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: m.cfg.InsecureSkipVerify}
 
 	if m.cfg.Cert != "" {
 		cert, err := tls.X509KeyPair([]byte(m.cfg.Cert), []byte(m.cfg.Key))

@@ -59,6 +59,8 @@ type SaslOAuthGCP struct {
 	// CA is optional PEM roots for the Google endpoints; system roots if empty.
 	CA     string `cfg:"ca" json:"ca"`
 	CAFile string `cfg:"ca_file" json:"ca_file"`
+	// InsecureSkipVerify disables server certificate and hostname verification. Unsafe for production.
+	InsecureSkipVerify bool `cfg:"insecure_skip_verify" json:"insecure_skip_verify"`
 
 	// Proxy is the URL of the proxy used for the Google token endpoints
 	// (http, https, socks5 or socks5h). If empty, oauth.proxy is used, then
@@ -196,6 +198,7 @@ func newGCPTokenSource(c SaslOAuthGCP, timeout time.Duration) (*gcpTokenSource, 
 		Cert: c.Cert, CertFile: c.CertFile,
 		Key: c.Key, KeyFile: c.KeyFile,
 		CA: c.CA, CAFile: c.CAFile,
+		InsecureSkipVerify: c.InsecureSkipVerify,
 	}, c.Proxy)
 	if err != nil {
 		return nil, fmt.Errorf("gcp: %w", err)

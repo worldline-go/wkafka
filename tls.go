@@ -18,6 +18,8 @@ type SecurityConfig struct {
 type TLSConfig struct {
 	// Enabled is whether TLS is enabled.
 	Enabled bool `cfg:"enabled" json:"enabled"`
+	// InsecureSkipVerify disables server certificate and hostname verification. Unsafe for production.
+	InsecureSkipVerify bool `cfg:"insecure_skip_verify" json:"insecure_skip_verify"`
 	// CertFile is the path to the client's TLS certificate.
 	// Should be use with KeyFile.
 	CertFile string `cfg:"cert_file" json:"cert_file"`
@@ -53,5 +55,10 @@ func (t TLSConfig) Generate() (*tls.Config, error) {
 		opts = append(opts, tlscfg.WithDiskCA(t.CAFile, tlscfg.ForClient))
 	}
 
-	return tlscfg.New(opts...)
+	config, err := tlscfg.New(opts...)
+	if err != nil {
+		return nil, err
+	}
+	config.InsecureSkipVerify = t.InsecureSkipVerify
+	return config, nil
 }

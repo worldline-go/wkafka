@@ -21,6 +21,29 @@ type mtlsTokenServer struct {
 	caPEM string
 }
 
+func TestOAuthTLSInsecureSkipVerify(t *testing.T) {
+	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"test-token","token_type":"Bearer","expires_in":3600}`)
+	}))
+	t.Cleanup(s.Close)
+	for _, insecure := range []bool{false, true} {
+		cfg := OAuthTLS{InsecureSkipVerify: insecure}
+		require.Equal(t, insecure, cfg.IsSet())
+		m, err := (SaslOAuth{
+			Enabled: true, TokenURL: s.URL, ClientID: "worker", ClientSecret: "secret", TLS: cfg,
+		}).Generate()
+		require.NoError(t, err)
+		_, initial, err := m.Authenticate(t.Context(), "broker:9092")
+		if insecure {
+			require.NoError(t, err)
+			require.Contains(t, string(initial), "auth=Bearer test-token")
+		} else {
+			require.Error(t, err)
+		}
+	}
+}
+
 func newMTLSTokenServer(t *testing.T, client *x509.Certificate, wantSecret string) *mtlsTokenServer {
 	t.Helper()
 	s := &mtlsTokenServer{}
