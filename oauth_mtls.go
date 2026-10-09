@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -35,6 +36,7 @@ func (t OAuthTLS) IsSet() bool {
 // serialize access.
 type mtlsClient struct {
 	cfg    OAuthTLS
+	proxy  *url.URL
 	client *http.Client
 }
 
@@ -47,7 +49,9 @@ func readPEMFile(path string) (string, error) {
 	return string(b), nil
 }
 
-func newMTLSClient(cfg OAuthTLS) (*mtlsClient, error) {
+// newMTLSClient builds the client. An empty proxy uses the HTTP(S)_PROXY and
+// NO_PROXY environment variables.
+func newMTLSClient(cfg OAuthTLS, proxy string) (*mtlsClient, error) {
 	for _, p := range []struct {
 		name         string
 		inline, file string
@@ -62,6 +66,16 @@ func newMTLSClient(cfg OAuthTLS) (*mtlsClient, error) {
 	}
 
 	m := &mtlsClient{cfg: cfg}
+
+	if proxy != "" {
+		u, err := url.Parse(proxy)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" && u.Scheme != "socks5h") {
+			return nil, errors.New("proxy must be an absolute http, https, socks5 or socks5h URL")
+		}
+
+		m.proxy = u
+	}
+
 	if _, err := m.reload(); err != nil {
 		return nil, err
 	}
@@ -130,6 +144,10 @@ func (m *mtlsClient) build() error {
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = tlsCfg
+
+	if m.proxy != nil {
+		tr.Proxy = http.ProxyURL(m.proxy)
+	}
 
 	if m.client != nil {
 		m.client.CloseIdleConnections()

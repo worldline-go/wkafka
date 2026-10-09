@@ -60,6 +60,11 @@ type SaslOAuthGCP struct {
 	CA     string `cfg:"ca" json:"ca"`
 	CAFile string `cfg:"ca_file" json:"ca_file"`
 
+	// Proxy is the URL of the proxy used for the Google token endpoints
+	// (http, https, socks5 or socks5h). If empty, oauth.proxy is used, then
+	// HTTPS_PROXY / HTTP_PROXY and NO_PROXY environment variables.
+	Proxy string `cfg:"proxy" json:"proxy" log:"false"`
+
 	// Scopes default to cloud-platform.
 	Scopes []string `cfg:"scopes" json:"scopes"`
 	// Lifetime of the impersonated token, default 1h.
@@ -191,7 +196,7 @@ func newGCPTokenSource(c SaslOAuthGCP, timeout time.Duration) (*gcpTokenSource, 
 		Cert: c.Cert, CertFile: c.CertFile,
 		Key: c.Key, KeyFile: c.KeyFile,
 		CA: c.CA, CAFile: c.CAFile,
-	})
+	}, c.Proxy)
 	if err != nil {
 		return nil, fmt.Errorf("gcp: %w", err)
 	}

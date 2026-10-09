@@ -94,7 +94,7 @@ func TestOAuthClientCredentialsMTLSFileRotation(t *testing.T) {
 	}
 	tlsCfg := OAuthTLS{CertFile: write("cert.pem", certPEM), KeyFile: write("key.pem", keyPEM), CAFile: write("ca.pem", s.caPEM)}
 
-	m, err := newMTLSClient(tlsCfg)
+	m, err := newMTLSClient(tlsCfg, "")
 	require.NoError(t, err)
 	c1, err := m.Client()
 	require.NoError(t, err)

@@ -71,6 +71,7 @@ security:
         client_secret: your-secret
         scopes: [kafka]
         timeout: 10s
+        # proxy: http://proxy.example.com:3128  # token endpoint proxy, default: HTTPS_PROXY / NO_PROXY env
         zid: ""
         extensions: {}
 ```
@@ -150,6 +151,7 @@ security:
           cert_file: /etc/certs/kafka/client-cert.pem
           key_file: /etc/certs/kafka/client-key.pem
           format: raw            # managed_kafka for Google Managed Service for Apache Kafka
+          # proxy: http://proxy.example.com:3128  # default: oauth.proxy, then HTTPS_PROXY / NO_PROXY env
           # lifetime: 1h         # impersonated token lifetime
           # refresh_before: 5m   # refresh this long before expiry
           # scopes: [https://www.googleapis.com/auth/cloud-platform]

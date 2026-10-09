@@ -30,6 +30,10 @@ type SaslOAuth struct {
 	// in client credentials mode. With a client certificate, client_secret is
 	// optional (RFC 8705 tls_client_auth).
 	TLS OAuthTLS `cfg:"tls" json:"tls"`
+	// Proxy is the URL of the proxy used for the token endpoint (http, https,
+	// socks5 or socks5h). If empty, HTTPS_PROXY / HTTP_PROXY and NO_PROXY
+	// environment variables are used. GCP uses it when gcp.proxy is empty.
+	Proxy string `cfg:"proxy" json:"proxy" log:"false"`
 	// Timeout bounds token endpoint requests; zero defaults to 10 seconds.
 	Timeout time.Duration `cfg:"timeout" json:"timeout"`
 	// TokenProvider is called for each authentication and owns token caching
@@ -66,7 +70,11 @@ func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 		if timeout == 0 {
 			timeout = 10 * time.Second
 		}
-		source, err := newGCPTokenSource(s.GCP, timeout)
+		gcp := s.GCP
+		if gcp.Proxy == "" {
+			gcp.Proxy = s.Proxy
+		}
+		source, err := newGCPTokenSource(gcp, timeout)
 		if err != nil {
 			return nil, fmt.Errorf("oauth: %w", err)
 		}
@@ -82,9 +90,9 @@ func (s SaslOAuth) Generate() (sasl.Mechanism, error) {
 		return (oauth.Auth{Token: s.Token, Zid: s.Zid, Extensions: extensions}).AsMechanism(), nil
 	}
 	var mtls *mtlsClient
-	if s.TLS.IsSet() {
+	if s.TLS.IsSet() || s.Proxy != "" {
 		var err error
-		if mtls, err = newMTLSClient(s.TLS); err != nil {
+		if mtls, err = newMTLSClient(s.TLS, s.Proxy); err != nil {
 			return nil, fmt.Errorf("oauth: tls: %w", err)
 		}
 	}

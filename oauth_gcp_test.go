@@ -10,7 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -224,8 +226,49 @@ func TestOAuthGCPValidation(t *testing.T) {
 		"bad format":      {Enabled: true, GCP: SaslOAuthGCP{Enabled: true, Audience: "a", Format: "nope"}},
 		"kafka no sa url": {Enabled: true, GCP: SaslOAuthGCP{Enabled: true, Audience: "a", Format: GCPFormatManagedKafka}},
 		"no cert":         {Enabled: true, GCP: SaslOAuthGCP{Enabled: true, Audience: "a"}},
+		"bad proxy":       {Enabled: true, GCP: SaslOAuthGCP{Enabled: true, Audience: "a", Cert: "x", Key: "y", Proxy: "ftp://p:1"}},
 	} {
 		_, err := c.Generate()
 		require.Error(t, err, name)
 	}
+}
+
+func TestOAuthGCPProxy(t *testing.T) {
+	cfg, f := gcpTestConfig(t)
+
+	var connects atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			http.Error(w, "connect only", http.StatusMethodNotAllowed)
+			return
+		}
+		connects.Add(1)
+		upstream, err := net.Dial("tcp", r.Host)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			upstream.Close()
+			return
+		}
+		_, _ = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		go func() {
+			_, _ = io.Copy(upstream, conn)
+			upstream.Close()
+		}()
+		_, _ = io.Copy(conn, upstream)
+		conn.Close()
+	}))
+	t.Cleanup(proxy.Close)
+
+	cfg.Proxy = proxy.URL
+	s, err := newGCPTokenSource(cfg, 5*time.Second)
+	require.NoError(t, err)
+	token, err := s.Token(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "ya29.final", token)
+	require.Positive(t, connects.Load())
+	require.EqualValues(t, 1, f.sts.Load())
 }

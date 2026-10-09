@@ -76,12 +76,32 @@ func TestOAuthStaticAndProvider(t *testing.T) {
 	require.ErrorIs(t, err, wantErr)
 }
 
+func TestOAuthClientCredentialsProxy(t *testing.T) {
+	var proxied atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.IsAbs() || r.URL.Host != "token.invalid" {
+			t.Errorf("unexpected proxy request %s", r.URL)
+		}
+		proxied.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"via-proxy","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer proxy.Close()
+	m, err := (SaslOAuth{Enabled: true, TokenURL: "http://token.invalid/token", ClientID: "client", ClientSecret: "secret", Proxy: proxy.URL}).Generate()
+	require.NoError(t, err)
+	_, initial, err := m.Authenticate(t.Context(), "broker:9092")
+	require.NoError(t, err)
+	require.Contains(t, string(initial), "auth=Bearer via-proxy")
+	require.EqualValues(t, 1, proxied.Load())
+}
+
 func TestOAuthValidation(t *testing.T) {
 	for _, config := range []SaslOAuth{
 		{Enabled: true},
 		{Enabled: true, Token: "token", TokenURL: "https://example.com"},
 		{Enabled: true, ClientID: "client"},
 		{Enabled: true, TokenURL: "/relative", ClientID: "client", ClientSecret: "secret"},
+		{Enabled: true, TokenURL: "https://example.com", ClientID: "client", ClientSecret: "secret", Proxy: "nope"},
 		{Enabled: true, Token: "token", Timeout: -time.Second},
 		{Enabled: true, Token: "token", TokenProvider: func(context.Context) (oauth.Auth, error) { return oauth.Auth{}, nil }},
 	} {
