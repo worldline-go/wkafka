@@ -176,6 +176,33 @@ Google Managed Service for Apache Kafka, which expects the token wrapped in a
 `GOOG_OAUTH2_TOKEN` JWT-like envelope. Other brokers usually expect `raw`.
 If a refresh fails, the cached token keeps being used until it actually expires.
 
+#### Google Cloud metadata server (GKE Workload Identity)
+
+Inside GCP, for example a GKE pod with Workload Identity, set
+`source: metadata`. Tokens come from the metadata server for the pod's
+service account; no credential file, certificate or proxy is needed. With
+`format: managed_kafka` the service account email is read from the metadata
+server too. `service_account_impersonation_url` still works to impersonate
+another service account.
+
+```yaml
+security:
+  tls:
+    enabled: true        # system roots verify Google Managed Kafka
+  sasl:
+    - oauth:
+        enabled: true
+        gcp:
+          enabled: true
+          source: metadata
+          format: managed_kafka
+          # metadata_url: http://metadata.google.internal  # default; GCE_METADATA_HOST overrides
+```
+
+The metadata server is always reached directly, without a proxy.
+`credentials`, `cert`, `key`, `audience` and `token_url` are rejected with
+`source: metadata`.
+
 #### Inline values and certificate rotation
 
 In both `oauth.tls` and `oauth.gcp`, each of `cert`, `key`, `ca` (and

@@ -291,3 +291,86 @@ func TestOAuthGCPProxy(t *testing.T) {
 	require.Positive(t, connects.Load())
 	require.EqualValues(t, 1, f.sts.Load())
 }
+
+type gcpMetadataFake struct {
+	srv          *httptest.Server
+	token, email atomic.Int32
+	scopes       atomic.Value
+}
+
+func newGCPMetadataFake(t *testing.T) *gcpMetadataFake {
+	t.Helper()
+	f := &gcpMetadataFake{}
+	const base = "/computeMetadata/v1/instance/service-accounts/default/"
+	mux := http.NewServeMux()
+	mux.HandleFunc(base+"token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Metadata-Flavor") != "Google" {
+			http.Error(w, "missing flavor", http.StatusForbidden)
+			return
+		}
+		f.token.Add(1)
+		f.scopes.Store(r.URL.Query().Get("scopes"))
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "ya29.metadata", "expires_in": 3600, "token_type": "Bearer"})
+	})
+	mux.HandleFunc(base+"email", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Metadata-Flavor") != "Google" {
+			http.Error(w, "missing flavor", http.StatusForbidden)
+			return
+		}
+		f.email.Add(1)
+		_, _ = io.WriteString(w, "gke-sa@proj.iam.gserviceaccount.com")
+	})
+	f.srv = httptest.NewServer(mux)
+	t.Cleanup(f.srv.Close)
+	return f
+}
+
+func TestOAuthGCPMetadata(t *testing.T) {
+	f := newGCPMetadataFake(t)
+	m, err := (SaslOAuth{Enabled: true, GCP: SaslOAuthGCP{
+		Enabled: true, Source: GCPSourceMetadata, MetadataURL: f.srv.URL + "/", Format: GCPFormatManagedKafka,
+	}}).Generate()
+	require.NoError(t, err)
+
+	for range 3 {
+		_, initial, err := m.Authenticate(t.Context(), "broker:9092")
+		require.NoError(t, err)
+		token := strings.TrimSuffix(strings.SplitN(string(initial), "auth=Bearer ", 2)[1], "\x01\x01")
+		parts := strings.Split(token, ".")
+		require.Len(t, parts, 3)
+		payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
+		sig, _ := base64.RawURLEncoding.DecodeString(parts[2])
+		require.Contains(t, string(payload), `"sub":"gke-sa@proj.iam.gserviceaccount.com"`)
+		require.Equal(t, "ya29.metadata", string(sig))
+	}
+	require.EqualValues(t, 1, f.token.Load())
+	require.EqualValues(t, 1, f.email.Load())
+	require.Equal(t, gcpScopeCloudPlatform, f.scopes.Load())
+}
+
+func TestOAuthGCPMetadataEnvHostAndNoProxy(t *testing.T) {
+	f := newGCPMetadataFake(t)
+	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(f.srv.URL, "http://"))
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+
+	s, err := newGCPTokenSource(SaslOAuthGCP{Enabled: true, Source: GCPSourceMetadata}, time.Second)
+	require.NoError(t, err)
+	token, err := s.Token(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "ya29.metadata", token)
+	require.EqualValues(t, 0, f.email.Load())
+}
+
+func TestOAuthGCPMetadataValidation(t *testing.T) {
+	for name, c := range map[string]SaslOAuthGCP{
+		"bad source":      {Enabled: true, Source: "nope"},
+		"with cert":       {Enabled: true, Source: GCPSourceMetadata, Cert: "x", Key: "y"},
+		"with creds":      {Enabled: true, Source: GCPSourceMetadata, Credentials: "{}"},
+		"with audience":   {Enabled: true, Source: GCPSourceMetadata, Audience: "a"},
+		"bad url":         {Enabled: true, Source: GCPSourceMetadata, MetadataURL: "metadata"},
+		"metadata on wif": {Enabled: true, Audience: "a", Cert: "x", Key: "y", MetadataURL: "http://m"},
+	} {
+		_, err := (SaslOAuth{Enabled: true, GCP: c}).Generate()
+		require.Error(t, err, name)
+	}
+}

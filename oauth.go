@@ -40,7 +40,8 @@ type SaslOAuth struct {
 	// and renewal. It must be safe for concurrent use. Its Auth is used as-is,
 	// including Zid and Extensions, rather than merged with the config fields.
 	TokenProvider func(context.Context) (oauth.Auth, error) `cfg:"-" json:"-" log:"false"`
-	// GCP fetches tokens from Google Cloud with X.509 workload identity federation.
+	// GCP fetches tokens from Google Cloud with X.509 workload identity
+	// federation or the metadata server.
 	GCP SaslOAuthGCP `cfg:"gcp" json:"gcp"`
 }
 
