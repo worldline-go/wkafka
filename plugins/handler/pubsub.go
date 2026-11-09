@@ -23,8 +23,12 @@ type PubSubConfig struct {
 }
 
 func (c *PubSubConfig) New(id string, logger wkafka.Logger) (pubsub, error) {
+	return c.newWithContext(context.Background(), id, logger)
+}
+
+func (c *PubSubConfig) newWithContext(ctx context.Context, id string, logger wkafka.Logger) (pubsub, error) {
 	if len(c.Redis.Address) > 0 {
-		return newRedis(c.Redis, c.Prefix+id, logger)
+		return newRedis(ctx, c.Redis, c.Prefix+id, logger)
 	}
 
 	return nil, nil
@@ -135,10 +139,10 @@ func (r *redisLogger) Printf(_ context.Context, format string, v ...any) {
 	r.log.Warn(fmt.Sprintf(format, v...))
 }
 
-func newRedis(r ConfigRedis, topic string, logger wkafka.Logger) (*Redis, error) {
+func newRedis(ctx context.Context, r ConfigRedis, topic string, logger wkafka.Logger) (*Redis, error) {
 	redis.SetLogger(&redisLogger{log: logger})
 
-	client, err := newRedisClient(r)
+	client, err := newRedisClient(ctx, r)
 	if err != nil {
 		return nil, err
 	}

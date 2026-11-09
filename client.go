@@ -153,7 +153,7 @@ func New(ctx context.Context, cfg Config, opts ...Option) (*Client, error) {
 	c.topicsCheck = slices.Concat(c.topics, c.dlqTopics)
 	c.appName = o.AppName
 
-	for name, p := range o.Plugin.holder {
+	for name, p := range o.Plugin.plugins() {
 		if err := p(ctx, c, cfg.Plugins[name]); err != nil {
 			return nil, fmt.Errorf("plugin %s: %w", name, err)
 		}

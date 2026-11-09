@@ -44,6 +44,10 @@ type Handler struct {
 
 var PluginName = "handler"
 
+func init() {
+	wkafka.RegisterPlugin(PluginWithName())
+}
+
 type Config struct {
 	Enabled    bool          `cfg:"enabled"     json:"enabled"`
 	Addr       string        `cfg:"addr"        json:"addr"`
@@ -111,7 +115,7 @@ func New(ctx context.Context, client *wkafka.Client, opts ...Option) (*Handler, 
 	}
 
 	if o.PubSub != nil {
-		pubsub, err := o.PubSub.New(client.AppName()+"-"+client.GroupID(), client.Logger())
+		pubsub, err := o.PubSub.newWithContext(ctx, client.AppName()+"-"+client.GroupID(), client.Logger())
 		if err != nil {
 			return nil, err
 		}

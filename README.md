@@ -361,17 +361,19 @@ return producer.Produce(ctx, data)
 
 #### Handler
 
-```go
-import (
-  "github.com/worldline-go/wkafka/handler"
-)
-```
-
 Editing the skip map and use our handler to initialize server mux.
 
 > `Redis` like API with support channel need for request goes to other instances.
 
-In the kafka config add the `plugins` section with `handler` plugin.
+Import the handler for its side effect, it registers itself as a plugin for
+every client:
+
+```go
+import _ "github.com/worldline-go/wkafka/plugins/handler"
+```
+
+In the kafka config add the `plugins` section with `handler` plugin. The
+handler only starts when `enabled` is true.
 
 ```yaml
 plugins:
@@ -379,27 +381,87 @@ plugins:
     enabled: true # enable plugins
     addr: ":17070" # address to listen, default is ":17070"
     pubsub:
-      prefix: "finops_", # prefix for pubsub channels, default is empty
+      prefix: "finops_" # prefix for pubsub channels, default is empty
       redis:
-        address: "localhost:6379" # address for redis like API
+        address: ["localhost:6379"] # address for redis like API
 ```
 
-Than enable the handler in the kafka client initialization.
+Adding it explicitly to a client still works and replaces the registered one:
 
 ```go
 wkafka.WithPlugin(handler.PluginWithName()),
 ```
 
-Or you can do it manually:
+Or you can do it manually, then keep `enabled` false in the config:
 
 ```go
-// import github.com/worldline-go/wkafka/handler
+// import github.com/worldline-go/wkafka/plugins/handler
 
 mux := http.NewServeMux()
 mux.Handle(handler.New(ctx, client, handler.Config{}.ToOption()))
 ```
 
 It will serve default on `/wkafka/ui` path.
+
+##### Redis connection
+
+More than one address always uses Redis Cluster. With a single address, cluster
+mode is detected from the server; set `cluster: true` to force it.
+
+```yaml
+plugins:
+  handler:
+    pubsub:
+      redis:
+        address: ["localhost:6379"]
+        username: ""
+        password: ""
+        client_name: ""
+        cluster: false # force cluster mode, detected automatically when false
+        tls:
+          enabled: false
+          insecure_skip_verify: false # unsafe, only for testing
+          cert_file: ""
+          key_file: ""
+          ca_file: ""
+        credentials_provider: "" # registered provider name, e.g. gcp_iam
+```
+
+`credentials_provider` cannot be combined with `username` or `password`. A
+provider can also be set from code with `ConfigRedis.CredentialsProviderFunc`.
+
+##### Google Cloud Memorystore with IAM
+
+The `gcp_iam` provider authenticates with an access token from Application
+Default Credentials. It is a separate module so the Google Cloud dependencies
+are only pulled in when you use it:
+
+```sh
+go get github.com/worldline-go/wkafka/plugins/handler/redisauth/gcpiam
+```
+
+It is released with the same version as wkafka.
+
+Import it for its side effect, it registers itself:
+
+```go
+import _ "github.com/worldline-go/wkafka/plugins/handler/redisauth/gcpiam"
+```
+
+```yaml
+plugins:
+  handler:
+    pubsub:
+      redis:
+        address: ["10.0.0.3:6378"]
+        credentials_provider: gcp_iam
+        tls:
+          enabled: true
+          ca_file: "/etc/memorystore/server-ca.pem"
+```
+
+The service account needs the `roles/redis.dbConnectionUser` role (or
+`roles/memorystore.dbConnectionUser` for Memorystore for Valkey).
 
 <details><summary>Handler Example</summary>
 
@@ -489,3 +551,19 @@ Use examples with `EXAMPLE` env variable:
 ```sh
 EXAMPLE=... make example
 ```
+
+### Release
+
+Tags are created manually. `plugins/handler/redisauth/gcpiam` is a separate
+module and needs its own tag with the same version, prefixed with its path:
+
+```sh
+VERSION=v0.7.6
+
+git tag ${VERSION}
+git tag plugins/handler/redisauth/gcpiam/${VERSION}
+git push origin ${VERSION} plugins/handler/redisauth/gcpiam/${VERSION}
+```
+
+Before tagging, set the wkafka version required in
+`plugins/handler/redisauth/gcpiam/go.mod` to the version being released.

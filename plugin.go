@@ -3,6 +3,7 @@ package wkafka
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 	"time"
@@ -50,6 +51,34 @@ func (p *plugin) Add(name string, fn pluginWrapFunc) {
 	}
 
 	p.holder[name] = fn
+}
+
+var registeredPlugins plugin
+
+// RegisterPlugin makes a plugin run for every client, usually called from the
+// plugin package's init so importing it is enough. The plugin is called even
+// when its config is missing, so it should do nothing unless enabled.
+//
+// A plugin given with WithPlugin under the same name replaces the registered one.
+func RegisterPlugin[T any](name string, fn PluginFunc[T]) {
+	registeredPlugins.Add(name, pluginConvert(fn))
+}
+
+// plugins returns the registered plugins merged with the client's own.
+func (p *plugin) plugins() map[string]pluginWrapFunc {
+	registeredPlugins.m.Lock()
+	merged := maps.Clone(registeredPlugins.holder)
+	registeredPlugins.m.Unlock()
+
+	if merged == nil {
+		merged = make(map[string]pluginWrapFunc)
+	}
+
+	p.m.Lock()
+	maps.Copy(merged, p.holder)
+	p.m.Unlock()
+
+	return merged
 }
 
 // //////////////////

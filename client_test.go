@@ -76,3 +76,37 @@ func TestNewCleansUpWhenPluginFails(t *testing.T) {
 	require.ErrorIs(t, produceResult.FirstErr(), kgo.ErrClientClosed)
 	require.ErrorIs(t, pluginContext.Err(), context.Canceled)
 }
+
+func TestRegisterPlugin(t *testing.T) {
+	type pluginConfig struct {
+		Value string `cfg:"value"`
+	}
+
+	var calls []string
+	RegisterPlugin("test-registered", func(_ context.Context, _ *Client, cfg pluginConfig) error {
+		calls = append(calls, "registered:"+cfg.Value)
+		return nil
+	})
+	RegisterPlugin("test-override", func(_ context.Context, _ *Client, _ pluginConfig) error {
+		calls = append(calls, "override-registered")
+		return nil
+	})
+	t.Cleanup(func() {
+		registeredPlugins.m.Lock()
+		delete(registeredPlugins.holder, "test-registered")
+		delete(registeredPlugins.holder, "test-override")
+		registeredPlugins.m.Unlock()
+	})
+
+	client, err := New(t.Context(), Config{
+		Brokers: []string{"127.0.0.1:1"},
+		Plugins: map[string]any{"test-registered": map[string]any{"value": "x"}},
+	}, WithPing(false), WithPlugin("test-override", func(_ context.Context, _ *Client, _ pluginConfig) error {
+		calls = append(calls, "override-option")
+		return nil
+	}))
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	require.ElementsMatch(t, []string{"registered:x", "override-option"}, calls)
+}
